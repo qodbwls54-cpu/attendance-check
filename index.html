@@ -186,6 +186,7 @@ function guessCode(c){
   return{kind:'unknown',h:0,n:0};
 }
 function holidayOf(s,hol){const k=keyOf(s);if(k.slice(5)==='05-01')return{type:'labor',name:'노동절'};return hol[k]?{type:'public',name:hol[k]}:null}
+const IDLAB=['사번','사원번호','직원번호','사원코드','사원ID','개인번호'];
 const META=['직종','직무','직책','직급','근무구분','근무유형','근무형태','구분','급수변경'];
 function cellCode(v){if(v==null||v==='')return'(빈칸)';if(typeof v==='number')return String(r2(v));return String(v).trim()||'(빈칸)'}
 function findDateRow(rows){
@@ -208,6 +209,7 @@ function parseGrid(name,rows,dr,defMonth,fixed){
   if(dr.mode!=='serial'){const f=fixed?{...fixed,src:'user'}:findMonth(rows,name,defMonth);msrc=f?.src||'guess';month={y:(f||defMonth).y,m:(f||defMonth).m}}
   if(dr.mode!=='serial'){const last=new Date(Date.UTC(month.y,month.m,0)).getUTCDate();for(let c=dr.c0;c<=dr.c1;c++){const d=rows[dr.r][c];serials.push(d<=last?serialOf(month.y,month.m,d):null)}}
   const metaCols=[];for(let c=0;c<dr.c0;c++){const lab=norm(rows[hdr]?.[c])||norm(rows[hdr-1]?.[c]);if(META.includes(lab))metaCols.push([c,lab])}
+  let idCol=-1;for(let c=0;c<dr.c0&&idCol<0;c++){const lab=norm(rows[hdr]?.[c])||norm(rows[hdr-1]?.[c]);if(IDLAB.includes(lab))idCol=c}
   const emps=[];const start=Math.max(dr.r,hdr)+1;
   let orphan=0;
   for(let i=start;i<rows.length;i++){const row=rows[i]||[];const nm=row[nameCol];
@@ -218,7 +220,8 @@ function parseGrid(name,rows,dr,defMonth,fixed){
     serials.forEach((s,j)=>{if(s==null)return;const v=row[dr.c0+j];if(v!=null&&v!=='')filled++;days.push({s,code:cellCode(v)})});
     if(!filled)continue;
     const meta={};metaCols.forEach(([c,l])=>{if(row[c]!=null&&row[c]!=='')meta[l]=String(row[c])});
-    emps.push({name:nm.trim(),meta,days});
+    const eid=idCol>=0&&row[idCol]!=null?String(row[idCol]).trim():'';
+    emps.push({name:nm.trim(),meta,days,eid});
   }
   const issues=[],W=(msg,x={})=>issues.push({lv:'warn',sheet:name,cell:'',msg,...x});
   if(msrc==='cell')W(`날짜 칸에 연·월이 없어 상단의 기준일 칸에서 ${month.y}년 ${month.m}월로 읽었습니다 — 맞는지 확인`,{month:true});
@@ -265,7 +268,7 @@ function parseStd(wb){
   const getSite=(v,sheet,cell)=>{const nm=String(v??'').trim();if(!nm){if(only)return only;I('err',sheet,cell,'사업장이 비어 있습니다 (설정에 사업장이 여러 개면 꼭 적어야 함)');return null}
     const s=sites.get(nm);if(!s)I('err',sheet,cell,`"${nm}"은 설정 시트에 없는 사업장입니다`);return s||null};
   const getEmp=(s,name,id,job,fl)=>{const key=id?'#'+id:name;let e=s.empMap.get(key);
-    if(!e){e={name,meta:{},days:new Map(),stdFlags:{gamdan:false,shift:false,ultra:null},blank:0};s.empMap.set(key,e)}
+    if(!e){e={name,eid:id||'',meta:{},days:new Map(),stdFlags:{gamdan:false,shift:false,ultra:null},blank:0};s.empMap.set(key,e)}
     if(job)e.meta.직무=job;if(fl.gamdan)e.stdFlags.gamdan=true;if(fl.shift)e.stdFlags.shift=true;if(fl.ultra)e.stdFlags.ultra=true;return e};
   const flagsOf=(r,H)=>{const f=p=>H.findIndex(x=>x.startsWith(p));const g=f('감단')>=0?f('감단'):f('감시');return{gamdan:g>=0&&yes(r[g]),shift:f('교대')>=0&&yes(r[f('교대')]),ultra:f('초단기')>=0&&yes(r[f('초단기')])}};
   const setDay=(e,serial,day,sheet,cell)=>{if(e.days.has(serial)){I('err',sheet,cell,`${e.name} ${keyOf(serial)} 기록이 중복됩니다`);return}e.days.set(serial,day)};
@@ -335,7 +338,7 @@ function parseStd(wb){
     s.emps=[...s.empMap.values()].map(e=>{let m=e.blank;
       for(let d=1;d<=last;d++){const ser=serialOf(s.month.y,s.month.m,d);if(!e.days.has(ser)){m++;e.days.set(ser,{code:'(기록없음)',kind:'off',h:0,n:0,std:true})}}
       if(m)miss.push(`${e.name} ${m}일`);
-      return{name:e.name,meta:e.meta,stdFlags:e.stdFlags,days:[...e.days.entries()].map(([sv,d])=>({s:sv,...d}))}});
+      return{name:e.name,eid:e.eid,meta:e.meta,stdFlags:e.stdFlags,days:[...e.days.entries()].map(([sv,d])=>({s:sv,...d}))}});
     if(miss.length)I('warn',s.name,'',`근태가 비어 있는 날은 휴무로 봅니다 — ${miss.slice(0,10).join(', ')}${miss.length>10?` 외 ${miss.length-10}명`:''}. 입사 전·퇴사 후는 "입사전"·"퇴사"로 적어 주세요`);
     if(!s.emps.length)I('warn','설정','',`"${s.name}"에 직원 기록이 없습니다`);
     delete s.empMap;out.push(s)}
@@ -425,6 +428,8 @@ function analyze(site,emp,codes,hol){
   if(left>0)f('warn',`대휴 ${left}일은 짝지을 휴일근로가 없음 — 휴무일 근무 보상휴가(서면합의)인지, 전월분인지 확인`);
   if(!F.gamdan&&!F.ultra)R.weeks.filter(w=>w.noRest).forEach(w=>f('bad',`${w.lab} 7일 연속 근무 — 주휴일 미부여`));
   const ab=R.weeks.filter(w=>w.absent);if(ab.length&&!F.ultra)f('info',`결근 주 ${ab.map(w=>w.lab).join(', ')} — 해당 주 주휴수당 미발생 가능`);
+  if(!F.gamdan&&!F.ultra){let alt=0,pairs=0;for(let i=1;i<ds.length;i++){if(ds[i].s-ds[i-1].s!==1)continue;pairs++;if(ds[i].worked!==ds[i-1].worked)alt++}
+    const wd=ds.filter(d=>d.worked).length;if(pairs>=14&&wd>=8&&alt/pairs>=.8)f('warn',`격일 근무 패턴(${wd}일 근무) — 경비 등 감시·단속적 근로자라면 '감단'(교대면 '교대'도)을 체크하세요. 체크하면 휴일근로수당이 노동절 외에는 빠지고, 다음 달에도 기억합니다`)}
   const unk=[...new Set(ds.filter(d=>d.kind==='unknown').map(d=>d.code))];if(unk.length)f('warn','미확인 근태코드: '+unk.join(', ')+' — 근태 코드 탭에서 지정');
   if(F.gamdan)f('info','감시·단속적 근로자(승인 전제): 연장·휴일가산·52시간 제외, 야간가산만 적용. '+(F.shift?'교대 → 노동절 근무 시 휴일근로수당 산정':'비교대 → 노동절 포함 휴일근로수당 미산정'));
   if(F.ultra)f('info','초단기(주 15시간 미만): 주휴일·휴일 미적용, 연장근로만 판단');
@@ -537,9 +542,13 @@ async function filesFromDrop(dt){const ents=[...(dt.items||[])].map(i=>i.webkitG
   const walk=async(e,dir)=>{if(e.isFile){const f=await new Promise((res,rej)=>e.file(res,rej));out.push(dir?new File([f],f.name,{type:f.type}):f);if(dir)Object.defineProperty(out[out.length-1],'webkitRelativePath',{value:dir+f.name})}
     else if(e.isDirectory){const rd=e.createReader();let b;do{b=await new Promise((res,rej)=>rd.readEntries(res,rej));for(const x of b)await walk(x,(dir||'')+e.name+'/')}while(b.length)}};
   for(const e of ents)await walk(e,'');return out}
+const stemKey=f=>String(f||'').split('/').pop().replace(/\.[^.]+$/,'').replace(/\d+/g,'').replace(/[\s_\-.]+/g,'_').replace(/^_|_$/g,'');
+const siteKey=s=>'site:'+(s.file?stemKey(s.file)+'›':'')+(s.sheet||s.name);
+const empKey=(s,e)=>e.eid?'emp:#'+e.eid:'emp:'+(s.file?stemKey(s.file)+'›':'')+(s.sheet||s.name)+'|'+e.name;
 function initSite(s){
   if(s.std){s.set={...s.stdSet};s.emps.forEach(e=>e.flags={...e.stdFlags})}
-  else{s.set={...guessSite(s),...(saved('site:'+s.name)||{})};s.emps.forEach(e=>e.flags={...guessFlags(s,e),...(saved('emp:'+s.name+'|'+e.name)||{})})}}
+  else{s.set={...guessSite(s),...(saved(siteKey(s))||saved('site:'+s.name)||{})};
+    s.emps.forEach(e=>{const sv=saved(empKey(s,e))||saved('emp:'+s.name+'|'+e.name)||{};e.flags={...guessFlags(s,e),...sv};e.savedUltra=sv.ultra??null;e.flags.ultra=e.savedUltra})}}
 function buildCodes(){const cnt={};
   st.sites.forEach(s=>(s.emps||[]).forEach(e=>e.days.forEach(d=>{if(d.fromTime||d.std||d.code==='(기록없음)')return;const c=d.code;cnt[c]=cnt[c]||{n:0,sites:new Set()};cnt[c].n++;cnt[c].sites.add(s.name)})));
   if(st.sites.some(s=>s.set?.blankWork))cnt['(빈칸=근무)']=cnt['(빈칸=근무)']||{n:0,sites:new Set(st.sites.filter(s=>s.set?.blankWork).map(s=>s.name))};
@@ -574,7 +583,7 @@ function renderRes(){const fs=$('#fSite').value,fo=$('#fOnly').value,fn=$('#fNam
   if(!rows.length){tb.innerHTML=`<tr><td colspan="13" class="empty">${st.res.length?'조건에 맞는 직원이 없습니다.':'근태 파일을 올리면 직원별 판정이 여기에 표시됩니다.'}</td></tr>`;return}
   const CAP=500,more=rows.length-CAP;
   tb.innerHTML=rows.slice(0,CAP).map(({s,e,r})=>{const F=e.flags,lv=lvOf(r),cap=s.set.flex?64:52;
-    const tags=r.flags.filter(f=>f.lv!=='info').map(f=>`<span class="tag ${f.lv}">${f.lv==='bad'?(/7일/.test(f.t)?'주휴 미부여':'52h 초과'):f.lv==='pay'?(/연장/.test(f.t)?'연장':/야간/.test(f.t)?'야간':'휴일'):(/노동절/.test(f.t)?'노동절':/대휴로/.test(f.t)?'대체 확인':/미확인/.test(f.t)?'코드 미확인':'확인')}</span>`).join('')||'<span class="z">이상 없음</span>';
+    const tags=r.flags.filter(f=>f.lv!=='info').map(f=>`<span class="tag ${f.lv}">${f.lv==='bad'?(/7일/.test(f.t)?'주휴 미부여':'52h 초과'):f.lv==='pay'?(/연장/.test(f.t)?'연장':/야간/.test(f.t)?'야간':'휴일'):(/격일/.test(f.t)?'감단 확인':/노동절/.test(f.t)?'노동절':/대휴로/.test(f.t)?'대체 확인':/미확인/.test(f.t)?'코드 미확인':'확인')}</span>`).join('')||'<span class="z">이상 없음</span>';
     const ck=(k)=>`<input type="checkbox" data-e="${e.id}" data-f="${k}" ${F[k]?'checked':''} aria-label="${k}">`;
     return`<tr class="emp" data-id="${e.id}"><td>${esc(s.name)}</td><td><b>${esc(e.name)}</b></td><td class="z">${esc(Object.values(e.meta).slice(0,2).join(' · '))}</td><td>${ck('gamdan')}</td><td>${ck('shift')}</td><td>${ck('ultra')}</td>
     <td class="n">${fmt(r.total)}</td><td class="n ${r.maxW>cap&&s.set.size5&&!F.gamdan?'hot':''}">${fmt(r.maxW)}</td><td class="n">${fmt(r.ot||r.otNP)}</td><td class="n">${fmt(r.night)}</td><td class="n">${fmt(r.hol8||r.holNP)}</td><td class="n">${fmt(r.holOver)}</td><td>${tags}</td></tr>`+(st.open.has(e.id)?detail(s,e,r):'')}).join('')+(more>0?`<tr><td colspan="13" class="note">처음 ${CAP}명만 표시했습니다 (나머지 ${more}명). 사업장·범위·이름으로 좁혀 보세요. 결과 복사는 전체가 복사됩니다.</td></tr>`:'');
@@ -609,12 +618,12 @@ function holToText(){$('#holText').value=Object.entries(st.hol).sort().map(([k,v
 holToText();
 document.addEventListener('change',ev=>{const t=ev.target;
   if((t.id==='file'||t.id==='dir')&&t.files.length){const l=[...t.files];t.value='';return load(l)}
-  if(t.dataset.e){const x=st.res.find(x=>x.e.id===t.dataset.e);x.e.flags[t.dataset.f]=t.checked;renderAll();if(!x.s.std)save('emp:'+x.s.name+'|'+x.e.name,{...x.e.flags});return}
+  if(t.dataset.e){const x=st.res.find(x=>x.e.id===t.dataset.e);x.e.flags[t.dataset.f]=t.checked;if(t.dataset.f==='ultra')x.e.savedUltra=t.checked;renderAll();if(!x.s.std)save(empKey(x.s,x.e),{gamdan:!!x.e.flags.gamdan,shift:!!x.e.flags.shift,ultra:x.e.savedUltra??null});return}
   if(t.dataset.k==='month'&&t.dataset.s){const s=st.sites[+t.dataset.s],[y,m]=t.value.split('-').map(Number);if(!y||!m||!s._src)return;
     const p=parseGrid(s.sheet,s._src.rows,s._src.dr,null,{y,m}),fl=new Map(s.emps.map(e=>[e.name,e.flags]));
     s.month=p.month;s.emps=p.emps.map((e,j)=>({...e,id:s.id+'-'+j,flags:fl.get(e.name)||guessFlags(s,e)}));
     st.issues=st.issues.filter(x=>!(x.file===s.file&&x.sheet===s.sheet&&x.month));st.open.clear();buildCodes();renderAll();toast(`${s.name}: ${y}년 ${m}월로 다시 읽었습니다`);return}
-  if(t.dataset.s){const s=st.sites[+t.dataset.s];s.set[t.dataset.k]=t.type==='checkbox'?t.checked:t.value;if(t.dataset.k==='blankWork'||t.dataset.k==='weekly'){buildCodes();s.emps.forEach(e=>{if(t.dataset.k==='weekly')e.flags.shift=t.value==='shift'||e.flags.shift})}renderAll();if(!s.std)save('site:'+s.name,{...s.set});return}
+  if(t.dataset.s){const s=st.sites[+t.dataset.s];s.set[t.dataset.k]=t.type==='checkbox'?t.checked:t.value;if(t.dataset.k==='blankWork'||t.dataset.k==='weekly'){buildCodes();s.emps.forEach(e=>{if(t.dataset.k==='weekly')e.flags.shift=t.value==='shift'||e.flags.shift})}renderAll();if(!s.std)save(siteKey(s),{...s.set});return}
   if(t.dataset.c){const c=t.dataset.c,e=st.codes[c];e[t.dataset.k]=t.dataset.k==='kind'?t.value:+t.value;
     if(t.dataset.k==='kind'){const g={work:8,holwork:8,half:4};if(g[t.value]&&!e.h)e.h=g[t.value];if(!g[t.value]){e.h=0;e.n=0}}
     renderAll();save('code:'+c,{...e});return}
