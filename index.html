@@ -60,6 +60,8 @@ textarea{width:100%;min-height:180px;font:14px/1.5 ui-monospace,monospace;border
 .issues{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:16px;font-size:14px}
 .issues.bad{border-left-color:var(--red)}.issues summary{cursor:pointer;margin-top:8px;min-height:32px;display:flex;align-items:center}
 .tpl{margin:14px 0 0;font-size:14px;color:light-dark(#cfc8c3,#5a524d);display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
+.dirbtn{display:inline-flex;align-items:center;background:transparent;color:inherit;border-color:light-dark(#5a524d,#cfc8c3)}
+.ftab td,.ftab th{padding:6px 8px}.ftab{margin:10px 0 4px}
 .tpl a{color:inherit;font-weight:600;text-underline-offset:3px;min-height:32px;display:inline-flex;align-items:center}.note{font-size:13px;color:var(--mute)}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.on{opacity:1}
@@ -78,10 +80,11 @@ textarea{width:100%;min-height:180px;font:14px/1.5 ui-monospace,monospace;border
   <h1>근태 적법성 점검</h1>
   <p>사업장별 출근부 엑셀을 올리면 주 52시간 초과, 연장·야간·휴일근로수당 지급 대상, 휴일대체 처리 여부를 직원별로 판정합니다. 파일은 이 브라우저 안에서만 읽고 어디로도 보내지 않습니다.</p>
   <label class="drop" id="drop" for="file">
-    <div style="flex:1 1 260px"><b>근태 엑셀 파일을 끌어다 놓거나 눌러서 선택</b><small>표준 양식은 칸 단위로 검증합니다. 다른 양식은 근태코드형·출퇴근시각형을 자동 인식하되, 추정이 들어간 부분을 경고로 알려 줍니다</small></div>
+    <div style="flex:1 1 260px"><b>근태 엑셀 파일을 끌어다 놓거나 눌러서 선택 — 여러 사업장 파일·폴더를 한꺼번에</b><small>표준 양식은 칸 단위로 검증합니다. 다른 양식은 근태코드형·출퇴근시각형을 자동 인식하되, 추정이 들어간 부분을 경고로 알려 줍니다</small></div>
     <span class="btn" style="display:inline-flex;align-items:center;background:var(--red);color:#fff;border-color:var(--red)">파일 선택</span>
-    <input type="file" id="file" accept=".xlsx,.xls,.xlsm" hidden>
+    <input type="file" id="file" accept=".xlsx,.xls,.xlsm" multiple hidden>
   </label>
+  <p class="tpl"><label class="btn dirbtn" for="dir">폴더째 선택</label><span>폴더 안의 엑셀(하위 폴더 포함)을 모두 읽습니다</span><input type="file" id="dir" webkitdirectory multiple hidden></p>
   <p class="tpl">표준 양식 받기 — 이 양식으로 올리면 칸 단위로 검증합니다:
     <a href="templates/attendance-std-daily.xlsx" download="근태표준양식_1_일별근태표.xlsx">① 일별 근태표 (근태코드 + 시간)</a>
     <a href="templates/attendance-std-clock.xlsx" download="근태표준양식_2_출퇴근기록.xlsx">② 출퇴근 기록 (하루 한 줄)</a></p>
@@ -504,19 +507,36 @@ $('#auth').addEventListener('click',async ev=>{const id=ev.target.id;
 DB.rows=lsRead();st.hol=saved('holidays')||{...HOL0};
 const fmt=x=>x?String(r2(x)):'<span class="z">–</span>';
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2200)}
-function load(file){
+const XL=/\.(xlsx|xlsm|xls)$/i;
+async function load(list){
   if(typeof XLSX==='undefined'){toast('엑셀 읽기 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도하세요');return}
-  const fr=new FileReader();fr.onload=()=>{try{
-    const wb=XLSX.read(new Uint8Array(fr.result),{type:'array'});const P=parseWorkbook(wb);
-    st.std=P.std;st.issues=P.issues||[];st.skipped=P.skipped||[];st.file=file.name;
-    st.sites=P.sites.map((p,i)=>{const s={id:i,...p,emps:p.emps.map((e,j)=>({...e,id:i+'-'+j}))};initSite(s);return s});
-    buildCodes();st.open.clear();
-    const ok=st.sites,ne=ok.reduce((t,s)=>t+s.emps.length,0),ner=st.issues.filter(x=>x.lv==='err').length;
-    $('#fileinfo').textContent=`${file.name} · `+(st.std?`표준 양식 · 사업장 ${ok.length}개 · 직원 ${ne}명${ner?` · 양식 오류 ${ner}건`:' · 양식 검증 통과'}`:`비표준 양식(자동 인식) · 근태 시트 ${ok.length}개 인식 · 직원 ${ne}명 · 건너뛴 시트 ${st.skipped.length}개`);
-    $('#fSite').innerHTML='<option value="">전체 사업장</option>'+ok.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
-    renderAll();
-  }catch(err){console.error(err);toast('파일을 읽지 못했습니다: '+err.message)}};fr.readAsArrayBuffer(file);
+  const files=[...list].filter(f=>XL.test(f.name)&&!f.name.startsWith('~$')).sort((a,b)=>(a.webkitRelativePath||a.name).localeCompare(b.webkitRelativePath||b.name,'ko'));
+  if(!files.length){toast('엑셀 파일(.xlsx·.xls·.xlsm)이 없습니다');return}
+  if(st.busy){toast('이전 파일을 읽는 중입니다');return}st.busy=true;
+  const multi=files.length>1,info=$('#fileinfo');st.files=[];st.issues=[];st.sites=[];st.open.clear();let id=0;
+  for(let i=0;i<files.length;i++){const f=files[i],path=f.webkitRelativePath||f.name;
+    info.textContent=`읽는 중 ${i+1}/${files.length} · ${path}`;await new Promise(r=>setTimeout(r,0));
+    const rec={name:path,std:false,sites:0,emps:0,err:0,warn:0,skipped:[],fail:''};st.files.push(rec);
+    try{const wb=XLSX.read(new Uint8Array(await f.arrayBuffer()),{type:'array'}),P=parseWorkbook(wb),stem=f.name.replace(/\.[^.]+$/,'');
+      rec.std=P.std;rec.skipped=P.skipped||[];
+      P.issues.forEach(x=>{st.issues.push({...x,file:path});x.lv==='err'?rec.err++:rec.warn++});
+      P.sites.forEach(p=>{const s={...p,id,file:path,sheet:p.name,emps:p.emps.map((e,j)=>({...e,id:id+'-'+j}))};
+        if(multi&&!p.std)s.name=stem+' › '+p.name;
+        if(st.sites.some(o=>o.name===s.name))s.name+=' ('+stem+')';
+        initSite(s);st.sites.push(s);id++;rec.sites++;rec.emps+=s.emps.length})}
+    catch(err){console.error(err);rec.fail=err.message||String(err);rec.err++;st.issues.push({lv:'err',file:path,sheet:'',cell:'',msg:'파일을 읽지 못했습니다 — '+rec.fail})}}
+  st.busy=false;st.multi=multi;buildCodes();
+  const F=st.files,ne=st.sites.reduce((t,s)=>t+s.emps.length,0),nstd=F.filter(x=>x.std).length,nfail=F.filter(x=>x.fail).length,ner=st.issues.filter(x=>x.lv==='err').length;
+  info.textContent=multi?`파일 ${F.length}개 · 표준 양식 ${nstd}개 · 비표준 ${F.length-nstd-nfail}개${nfail?` · 읽기 실패 ${nfail}개`:''} · 사업장 ${st.sites.length}곳 · 직원 ${ne}명${ner?` · 양식 오류 ${ner}건`:''}`
+    :`${F[0].name} · `+(F[0].fail?'읽기 실패':F[0].std?`표준 양식 · 사업장 ${st.sites.length}개 · 직원 ${ne}명${ner?` · 양식 오류 ${ner}건`:' · 양식 검증 통과'}`:`비표준 양식(자동 인식) · 근태 시트 ${st.sites.length}개 인식 · 직원 ${ne}명 · 건너뛴 시트 ${F[0].skipped.length}개`);
+  $('#fSite').innerHTML='<option value="">전체 사업장</option>'+st.sites.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  renderAll();
 }
+async function filesFromDrop(dt){const ents=[...(dt.items||[])].map(i=>i.webkitGetAsEntry?.()).filter(Boolean);
+  if(!ents.length)return[...dt.files];const out=[];
+  const walk=async(e,dir)=>{if(e.isFile){const f=await new Promise((res,rej)=>e.file(res,rej));out.push(dir?new File([f],f.name,{type:f.type}):f);if(dir)Object.defineProperty(out[out.length-1],'webkitRelativePath',{value:dir+f.name})}
+    else if(e.isDirectory){const rd=e.createReader();let b;do{b=await new Promise((res,rej)=>rd.readEntries(res,rej));for(const x of b)await walk(x,(dir||'')+e.name+'/')}while(b.length)}};
+  for(const e of ents)await walk(e,'');return out}
 function initSite(s){
   if(s.std){s.set={...s.stdSet};s.emps.forEach(e=>e.flags={...e.stdFlags})}
   else{s.set={...guessSite(s),...(saved('site:'+s.name)||{})};s.emps.forEach(e=>e.flags={...guessFlags(s,e),...(saved('emp:'+s.name+'|'+e.name)||{})})}}
@@ -529,14 +549,19 @@ function buildCodes(){const cnt={};
 function results(){const out=[];st.sites.forEach(s=>{if(s.error)return;s.emps.forEach(e=>out.push({s,e,r:analyze(s,e,st.codes,st.hol)}))});return out}
 function lvOf(r){return r.flags.some(f=>f.lv==='bad')?'bad':r.flags.some(f=>f.lv==='pay')?'pay':r.flags.some(f=>f.lv==='warn')?'warn':''}
 function renderAll(){st.res=results();renderKpis();renderIssues();renderRes();renderSites();renderCodes()}
-function renderIssues(){const el=$('#issues');const L=st.issues||[];
-  if(!st.file){el.hidden=true;return}el.hidden=false;
-  const err=L.filter(x=>x.lv==='err'),bad=st.std?err.length>0:true;el.className='issues'+(bad?' bad':'');
-  const head=st.std?(err.length?`<b class="hot">표준 양식 오류 ${err.length}건</b> — 아래 칸을 고쳐 다시 올려 주세요. 오류가 난 칸은 판정에서 빠지거나 다르게 계산됩니다.`:`<b>표준 양식 검증 통과</b>${L.length?` — 확인할 점 ${L.length}건`:''}`)
-    :`<b class="hot">비표준 양식 — 자동 인식 결과입니다.</b> 칸의 의미를 추정해서 읽었으므로 원본과 대조해야 합니다. 정확한 판정은 표준 양식으로 옮겨 올려 주세요.`;
-  const li=L.slice(0,300).map(x=>`<li><span class="tag ${x.lv==='err'?'bad':'warn'}">${x.lv==='err'?'오류':'확인'}</span> <b>${esc(x.sheet)}${x.cell?' '+x.cell:''}</b> ${esc(x.msg)}</li>`).join('');
-  el.innerHTML=`<p style="margin:0">${head}</p>`+(L.length?`<details ${L.length<=12?'open':''}><summary>항목 ${L.length}건 보기</summary><ul class="flags">${li}</ul>${L.length>300?'<p class="note">처음 300건만 표시</p>':''}</details>`:'')
-    +(st.skipped?.length?`<p class="note" style="margin:8px 0 0">근태표가 아니어서 건너뛴 시트 ${st.skipped.length}개: ${esc(st.skipped.join(', '))}</p>`:'');
+function renderIssues(){const el=$('#issues');const L=st.issues||[],F=st.files||[];
+  if(!F.length){el.hidden=true;return}el.hidden=false;
+  const err=L.filter(x=>x.lv==='err'),legacy=F.filter(x=>!x.std&&!x.fail).length;el.className='issues'+(err.length||legacy?' bad':'');
+  const parts=[];
+  if(err.length)parts.push(`<b class="hot">양식 오류 ${err.length}건</b> — 표시된 칸을 고쳐 다시 올려 주세요. 오류 난 칸은 판정에서 빠지거나 다르게 계산됩니다.`);
+  else if(!legacy)parts.push(`<b>${F.length>1?'모든 파일 ':''}표준 양식 검증 통과</b>${L.length?` — 확인할 점 ${L.length}건`:''}`);
+  if(legacy)parts.push(`<b class="hot">비표준 양식 ${F.length>1?legacy+'개 ':''}— 자동 인식 결과입니다.</b> 칸의 의미를 추정해서 읽었으므로 원본과 대조해야 합니다. 정확한 판정은 표준 양식으로 옮겨 올려 주세요.`);
+  const ord=[...L].sort((a,b)=>(a.lv==='err'?0:1)-(b.lv==='err'?0:1));
+  const li=ord.slice(0,300).map(x=>`<li><span class="tag ${x.lv==='err'?'bad':'warn'}">${x.lv==='err'?'오류':'확인'}</span> ${F.length>1?`<span class="z">${esc(x.file)}</span> `:''}<b>${esc(x.sheet)}${x.cell?' '+x.cell:''}</b> ${esc(x.msg)}</li>`).join('');
+  const ftab=F.length>1?`<details ${F.length<=8?'open':''}><summary>파일 ${F.length}개 상태</summary><div class="scroll"><table class="ftab"><thead><tr><th>파일</th><th>양식</th><th class="n">사업장</th><th class="n">직원</th><th class="n">오류</th><th class="n">확인</th><th class="n">건너뛴 시트</th></tr></thead><tbody>${
+    F.map(f=>`<tr><td>${esc(f.name)}</td><td>${f.fail?'<span class="tag bad">읽기 실패</span>':f.std?'표준':'<span class="tag warn">비표준</span>'}</td><td class="n">${f.sites}</td><td class="n">${f.emps}</td><td class="n ${f.err?'hot':''}">${f.err||'–'}</td><td class="n">${f.warn||'–'}</td><td class="n" title="${esc(f.skipped.join(', '))}">${f.skipped.length||'–'}</td></tr>`).join('')}</tbody></table></div></details>`:'';
+  const sk=F.length===1&&F[0].skipped.length?`<p class="note" style="margin:8px 0 0">근태표가 아니어서 건너뛴 시트 ${F[0].skipped.length}개: ${esc(F[0].skipped.join(', '))}</p>`:'';
+  el.innerHTML=parts.map(t=>`<p style="margin:0 0 4px">${t}</p>`).join('')+ftab+(L.length?`<details ${L.length<=12?'open':''}><summary>항목 ${L.length}건 보기${err.length?` (오류 ${err.length}건 먼저)`:''}</summary><ul class="flags">${li}</ul>${L.length>300?'<p class="note">처음 300건만 표시 — 파일별로 나눠 올리면 전부 볼 수 있습니다</p>':''}</details>`:'')+sk;
 }
 function renderKpis(){const R=st.res;if(!R.length){$('#kpis').innerHTML='<div class="kpi" style="grid-column:1/-1"><span>아직 불러온 파일이 없습니다. 위에서 근태 엑셀을 올리면 여기 요약이 나옵니다.</span></div>';return}
   const c=fn=>R.filter(fn).length;
@@ -547,11 +572,12 @@ function renderRes(){const fs=$('#fSite').value,fo=$('#fOnly').value,fn=$('#fNam
   const rows=st.res.filter(x=>(!fs||String(x.s.id)===fs)&&(!fn||x.e.name.includes(fn))&&(!fo||(fo==='bad'?x.r.flags.some(f=>f.lv==='bad'):x.r.flags.some(f=>f.lv===fo))));
   const tb=$('#res tbody');
   if(!rows.length){tb.innerHTML=`<tr><td colspan="13" class="empty">${st.res.length?'조건에 맞는 직원이 없습니다.':'근태 파일을 올리면 직원별 판정이 여기에 표시됩니다.'}</td></tr>`;return}
-  tb.innerHTML=rows.map(({s,e,r})=>{const F=e.flags,lv=lvOf(r),cap=s.set.flex?64:52;
+  const CAP=500,more=rows.length-CAP;
+  tb.innerHTML=rows.slice(0,CAP).map(({s,e,r})=>{const F=e.flags,lv=lvOf(r),cap=s.set.flex?64:52;
     const tags=r.flags.filter(f=>f.lv!=='info').map(f=>`<span class="tag ${f.lv}">${f.lv==='bad'?(/7일/.test(f.t)?'주휴 미부여':'52h 초과'):f.lv==='pay'?(/연장/.test(f.t)?'연장':/야간/.test(f.t)?'야간':'휴일'):(/노동절/.test(f.t)?'노동절':/대휴로/.test(f.t)?'대체 확인':/미확인/.test(f.t)?'코드 미확인':'확인')}</span>`).join('')||'<span class="z">이상 없음</span>';
     const ck=(k)=>`<input type="checkbox" data-e="${e.id}" data-f="${k}" ${F[k]?'checked':''} aria-label="${k}">`;
     return`<tr class="emp" data-id="${e.id}"><td>${esc(s.name)}</td><td><b>${esc(e.name)}</b></td><td class="z">${esc(Object.values(e.meta).slice(0,2).join(' · '))}</td><td>${ck('gamdan')}</td><td>${ck('shift')}</td><td>${ck('ultra')}</td>
-    <td class="n">${fmt(r.total)}</td><td class="n ${r.maxW>cap&&s.set.size5&&!F.gamdan?'hot':''}">${fmt(r.maxW)}</td><td class="n">${fmt(r.ot||r.otNP)}</td><td class="n">${fmt(r.night)}</td><td class="n">${fmt(r.hol8||r.holNP)}</td><td class="n">${fmt(r.holOver)}</td><td>${tags}</td></tr>`+(st.open.has(e.id)?detail(s,e,r):'')}).join('');
+    <td class="n">${fmt(r.total)}</td><td class="n ${r.maxW>cap&&s.set.size5&&!F.gamdan?'hot':''}">${fmt(r.maxW)}</td><td class="n">${fmt(r.ot||r.otNP)}</td><td class="n">${fmt(r.night)}</td><td class="n">${fmt(r.hol8||r.holNP)}</td><td class="n">${fmt(r.holOver)}</td><td>${tags}</td></tr>`+(st.open.has(e.id)?detail(s,e,r):'')}).join('')+(more>0?`<tr><td colspan="13" class="note">처음 ${CAP}명만 표시했습니다 (나머지 ${more}명). 사업장·범위·이름으로 좁혀 보세요. 결과 복사는 전체가 복사됩니다.</td></tr>`:'');
 }
 function detail(s,e,r){const TN={labor:'노동절',public:'공휴일',weekly:'주휴일',agreed:'약정휴일'};
   const strip=r.ds.map(d=>{const cls=[d.ltype?'h':'',d.worked&&d.type&&!d.subst?'hw':'',d.subst?'sb':'',d.worked?'':'off'].join(' ');
@@ -582,12 +608,12 @@ function renderCodes(){const tb=$('#codes tbody');const keys=Object.keys(st.cnt|
 function holToText(){$('#holText').value=Object.entries(st.hol).sort().map(([k,v])=>k+' '+v).join('\n')}
 holToText();
 document.addEventListener('change',ev=>{const t=ev.target;
-  if(t.id==='file'&&t.files[0])return load(t.files[0]);
+  if((t.id==='file'||t.id==='dir')&&t.files.length){const l=[...t.files];t.value='';return load(l)}
   if(t.dataset.e){const x=st.res.find(x=>x.e.id===t.dataset.e);x.e.flags[t.dataset.f]=t.checked;renderAll();if(!x.s.std)save('emp:'+x.s.name+'|'+x.e.name,{...x.e.flags});return}
   if(t.dataset.k==='month'&&t.dataset.s){const s=st.sites[+t.dataset.s],[y,m]=t.value.split('-').map(Number);if(!y||!m||!s._src)return;
-    const p=parseGrid(s.name,s._src.rows,s._src.dr,null,{y,m}),fl=new Map(s.emps.map(e=>[e.name,e.flags]));
+    const p=parseGrid(s.sheet,s._src.rows,s._src.dr,null,{y,m}),fl=new Map(s.emps.map(e=>[e.name,e.flags]));
     s.month=p.month;s.emps=p.emps.map((e,j)=>({...e,id:s.id+'-'+j,flags:fl.get(e.name)||guessFlags(s,e)}));
-    st.issues=st.issues.filter(x=>!(x.sheet===s.name&&x.month));st.open.clear();buildCodes();renderAll();toast(`${s.name}: ${y}년 ${m}월로 다시 읽었습니다`);return}
+    st.issues=st.issues.filter(x=>!(x.file===s.file&&x.sheet===s.sheet&&x.month));st.open.clear();buildCodes();renderAll();toast(`${s.name}: ${y}년 ${m}월로 다시 읽었습니다`);return}
   if(t.dataset.s){const s=st.sites[+t.dataset.s];s.set[t.dataset.k]=t.type==='checkbox'?t.checked:t.value;if(t.dataset.k==='blankWork'||t.dataset.k==='weekly'){buildCodes();s.emps.forEach(e=>{if(t.dataset.k==='weekly')e.flags.shift=t.value==='shift'||e.flags.shift})}renderAll();if(!s.std)save('site:'+s.name,{...s.set});return}
   if(t.dataset.c){const c=t.dataset.c,e=st.codes[c];e[t.dataset.k]=t.dataset.k==='kind'?t.value:+t.value;
     if(t.dataset.k==='kind'){const g={work:8,holwork:8,half:4};if(g[t.value]&&!e.h)e.h=g[t.value];if(!g[t.value]){e.h=0;e.n=0}}
@@ -597,7 +623,7 @@ $('#fName').addEventListener('input',renderRes);
 $('#res').addEventListener('click',ev=>{if(ev.target.closest('input'))return;const tr=ev.target.closest('tr.emp');if(!tr)return;const id=tr.dataset.id;st.open.has(id)?st.open.delete(id):st.open.add(id);renderRes()});
 document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));['res','site','code','rule'].forEach(t=>$('#t-'+t).hidden=t!==b.dataset.t)}));
 const drop=$('#drop');['dragenter','dragover'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.add('on')}));['dragleave','drop'].forEach(n=>drop.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('on')}));
-drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)load(f)});
+drop.addEventListener('drop',async e=>{const l=await filesFromDrop(e.dataTransfer);if(l.length)load(l)});
 $('#holSave').addEventListener('click',()=>{const o={};$('#holText').value.split('\n').forEach(l=>{const m=l.trim().match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/);if(m)o[m[1]]=m[2]||'공휴일'});st.hol=o;renderAll();save('holidays',o);toast(`공휴일 ${Object.keys(o).length}개 적용`)});
 $('#holReset').addEventListener('click',()=>{st.hol={...HOL0};holToText();renderAll();save('holidays',null);toast('기본 공휴일로 되돌렸습니다')});
 $('#copy').addEventListener('click',async()=>{if(!st.res.length)return toast('복사할 결과가 없습니다');
