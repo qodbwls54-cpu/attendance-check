@@ -60,6 +60,7 @@ python3 -m http.server 8000
 | --- | --- |
 | `templates/attendance-std-daily.xlsx` | ① 일별 근태표 — 직원마다 근태/근로시간/연장/야간 4줄 |
 | `templates/attendance-std-clock.xlsx` | ② 출퇴근 기록 — 직원·날짜마다 한 줄 (출퇴근 기록기 자료 붙여넣기용) |
+| `templates/attendance-std-status.xlsx` | ③ 근무현황 — 직원마다 한 줄(○·/·연차…) + 시간외 시트. 기존 근무현황 양식을 그대로 붙여 쓰기 좋음 |
 
 양식을 고치려면 `templates/make_templates.py`를 수정하고 `python3 templates/make_templates.py`로 다시 만듭니다 (openpyxl 필요).
 

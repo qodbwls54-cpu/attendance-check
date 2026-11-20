@@ -89,15 +89,17 @@ def guide_sheet(wb, kind):
     ws.column_dimensions["A"].width = 16
     ws.column_dimensions["B"].width = 34
     ws.column_dimensions["C"].width = 70
-    ws["A1"] = "근태 표준 양식 " + ("① 일별 근태표" if kind == "daily" else "② 출퇴근 기록")
+    ws["A1"] = "근태 표준 양식 " + {"daily": "① 일별 근태표", "clock": "② 출퇴근 기록", "status": "③ 근무현황"}[kind]
     ws["A1"].font = Font(bold=True, size=16)
     lines = [
         "작성 순서",
         "1. [설정] 시트에 사업장 이름·대상월·사업장 조건을 적습니다.",
-        ("2. [근태표] 시트에 직원마다 4줄(근태/근로시간/연장/야간)을 적습니다. 직원이 많으면 4줄 묶음을 복사해 붙여 쓰세요."
-         if kind == "daily" else
-         "2. [출퇴근] 시트에 직원·날짜마다 한 줄씩 적습니다. 출퇴근 기록기에서 내려받은 자료를 붙여넣어도 됩니다."),
-        "3. 시트 이름(설정·근태표/출퇴근)과 머리글 행은 바꾸지 마세요. 시트를 나눌 때는 '근태표_A동'처럼 이름 앞부분을 유지하세요.",
+        {"daily": "2. [근태표] 시트에 직원마다 4줄(근태/근로시간/연장/야간)을 적습니다. 직원이 많으면 4줄 묶음을 복사해 붙여 쓰세요.",
+         "clock": "2. [출퇴근] 시트에 직원·날짜마다 한 줄씩 적습니다. 출퇴근 기록기에서 내려받은 자료를 붙여넣어도 됩니다.",
+         "status": "2. [근무현황] 시트에 직원마다 한 줄, 날짜 칸에 ○(근무)·/(휴무)·연차 등을 적습니다. 연장근로가 있으면 [시간외] 시트에 같은 사람의 날짜별 시간을 적습니다."}[kind],
+        {"daily": "3. 시트 이름(설정·근태표)과 머리글 행은 바꾸지 마세요. 시트를 나눌 때는 '근태표_A동'처럼 이름 앞부분을 유지하세요.",
+         "clock": "3. 시트 이름(설정·출퇴근)과 머리글 행은 바꾸지 마세요. 시트를 나눌 때는 '출퇴근_A동'처럼 이름 앞부분을 유지하세요.",
+         "status": "3. 시트 이름(설정·근무현황·시간외)과 머리글 행은 바꾸지 마세요. 주간·심야를 나눌 때는 '근무현황(주간)', '근무현황(심야)', '시간외(심야)'처럼 이름 앞부분을 유지하세요."}[kind],
         "4. 웹 점검 도구에 올리면 칸 단위로 검증하고, 틀린 칸은 '근태표 K12'처럼 위치를 알려 줍니다.",
         "",
         "시간 입력 규칙",
@@ -109,6 +111,14 @@ def guide_sheet(wb, kind):
             "· 근로시간을 비우면 근무 8시간·반차 4시간·휴근 8시간으로 보고, '연장' 줄의 시간을 더합니다.",
             "  (예: 근무 + 연장 2 → 10시간). 정확한 시간이 있으면 근로시간 줄에 직접 적으세요(그때 연장 줄은 무시).",
             "· 격일제·24시간 교대처럼 하루 근로시간이 8시간이 아니면 근로시간 줄을 반드시 적으세요.",
+        ]
+    elif kind == "status":
+        lines += [
+            "· ○ 하루 근로시간 = 그 사람의 '1일근로' 칸(비우면 8시간). 야간조라면 '1일야간'에 22~06시 근로시간을 적으세요(예: 22:00~07:00, 휴게 1시간 → 1일근로 8, 1일야간 7).",
+            "· 그날만 시간이 다르면 날짜 칸에 ○ 대신 숫자(실근로시간)를 적어도 됩니다. 예: 12",
+            "· [시간외] 시트의 시간은 그날 근로시간에 더합니다. 휴무(/)인 날 일했다면 근무현황에 ○ 또는 휴근으로 적어 주세요.",
+            "· 입사일 전·퇴사일 후 날짜는 비워 두면 재직 기간이 아닌 것으로 봅니다. 재직 중 빈 칸은 휴무로 봅니다.",
+            "· 머리글 위·아래의 '전체 소계' 같은 합계 행은 있어도 됩니다(성명이 없는 행은 읽지 않음).",
         ]
     else:
         lines += [
@@ -134,7 +144,9 @@ def guide_sheet(wb, kind):
     for c, lab in enumerate(["코드", "판정에서의 의미", "쓰는 경우"], 1):
         cell = ws.cell(r, c, lab)
         cell.fill, cell.font, cell.border = HEAD, WHITE_B, BOX
-    table = [
+    table = ([("○", "근무 (1일근로 시간)", "근무현황 시트의 기본 근무 표시. O·◯·●도 같은 뜻"),
+              ("/", "휴무", "근무현황 시트의 쉬는 날 표시"),
+              ("숫자 (예: 12)", "그날 실근로시간", "그날만 근로시간이 다를 때")] if kind == "status" else []) + [
         ("근무", "근무 (기본 8시간)", "평일·휴무일 근무. 공휴일·주휴일에 일하면 자동으로 휴일근로로 판정"),
         ("휴근", "휴일 근무 (기본 8시간)", "교대 근무자가 지정 주휴일에 출근한 경우 등 휴일근로임을 표시할 때"),
         ("반차", "4시간 근무", "오전·오후 반차"),
@@ -327,6 +339,99 @@ def clock():
     return path
 
 
+def status():
+    wb = Workbook()
+    guide_sheet(wb, "status")
+    settings_sheet(wb)
+    ws = wb.create_sheet("근무현황")
+    ws["A1"] = "근무현황"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A2"] = "직원마다 한 줄 · ○ 근무 / 휴무 · 연차·반차·주휴·휴근·대휴 등 · 숫자 = 그날 실근로시간"
+    ws["A2"].font = Font(size=9, color="6B6460")
+    fixed = ["순번", "구분", "직무상세", "성명", "사번", "입사일", "퇴사일", "감단", "교대", "초단기", "1일근로", "1일야간"]
+    nF = len(fixed)
+    head(ws, 3, fixed + list(range(1, 32)) + ["근무일수"], [5, 8, 11, 9, 10, 11, 11, 5, 5, 6, 6, 6] + [4.2] * 31 + [7])
+    for d in range(1, LAST + 1):
+        wd = dt.date(Y, M, d).weekday()
+        cell = ws.cell(4, nF + d, "월화수목금토일"[wd])
+        cell.alignment, cell.border = CENTER, BOX
+        cell.font = Font(color="E63C12" if wd >= 5 else "6B6460", size=9)
+    ws.cell(4, 1, f"{Y}-{M:02d} 요일 (예시)").font = Font(size=9, color="6B6460")
+    hol = {3, 5, 9}
+
+    def wk(d):
+        return dt.date(Y, M, d).weekday()
+
+    people = []
+    # 주간 상담: 평일 ○, 주말·공휴일 /, 일요일 주휴, 20일 연차
+    days = {}
+    for d in range(1, LAST + 1):
+        days[d] = "주휴" if wk(d) == 6 else "/" if wk(d) == 5 or d in hol else "○"
+    days[20] = "연차"
+    days[9] = "○"
+    people.append(("그룹장", "상담", "김예시", "E101", dt.date(2023, 3, 2), None, "", "", "", 8, None, days))
+    # 심야조 격일: 22:00~07:00, 휴게 1h → 1일근로 8, 1일야간 7
+    days = {d: ("○" if d % 2 else "/") for d in range(1, LAST + 1)}
+    people.append(("상담원", "심야상담", "이샘플", "E102", dt.date(2024, 5, 13), None, "", "Y", "", 8, 7, days))
+    # 월중 퇴사: 10/17 퇴사, 하루 12시간 근무한 날
+    days = {d: ("주휴" if wk(d) == 6 else "/" if wk(d) == 5 or d in hol else "○") for d in range(1, 18)}
+    days[14] = 12
+    people.append(("상담원", "상담", "박표준", "E103", dt.date(2025, 1, 6), dt.date(Y, M, 17), "", "", "", 8, None, days))
+    r = 5
+    dv = DataValidation(type="list", formula1='"○,/,주휴,휴근,반차,대휴,연차,병가,경조,공가,휴가,휴직,결근"', allow_blank=True, showErrorMessage=False)
+    ws.add_data_validation(dv)
+    for n, (grp, job, name, eid, join, quit_, g, sft, u, base, night, days) in enumerate(people + [None] * 0, 1):
+        vals = [n, grp, job, name, eid, join, quit_, g or None, sft or None, u or None, base, night]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(r, c, v)
+            cell.fill, cell.border = EXAMPLE, BOX
+        ws.cell(r, 6).number_format = ws.cell(r, 7).number_format = "yyyy-mm-dd"
+        for d in range(1, LAST + 1):
+            cell = ws.cell(r, nF + d, days.get(d))
+            cell.fill, cell.border, cell.alignment = EXAMPLE, BOX, CENTER
+        col = get_column_letter(nF + LAST)
+        ws.cell(r, nF + 32, f'=COUNTIF({get_column_letter(nF + 1)}{r}:{col}{r},"○")+COUNT({get_column_letter(nF + 1)}{r}:{col}{r})').border = BOX
+        r += 1
+    for rr in range(r, r + 300):
+        for c in range(1, nF + 33):
+            ws.cell(rr, c).border = BOX
+        ws.cell(rr, 6).number_format = ws.cell(rr, 7).number_format = "yyyy-mm-dd"
+    dv.add(f"{get_column_letter(nF + 1)}5:{get_column_letter(nF + 31)}{r + 300}")
+    yn(ws, f"H5:J{r + 300}")
+    ws.freeze_panes = ws.cell(5, nF + 1)
+
+    ot = wb.create_sheet("시간외")
+    ot["A1"] = "시간외 (연장근로 시간)"
+    ot["A1"].font = Font(bold=True, size=14)
+    ot["A2"] = "근무현황과 같은 사람(사번 또는 성명)의 날짜별 연장시간. 그날 근로시간에 더해집니다. 없는 사람은 안 적어도 됩니다."
+    ot["A2"].font = Font(size=9, color="6B6460")
+    head(ot, 3, ["순번", "성명", "사번"] + list(range(1, 32)) + ["합계"], [5, 9, 10] + [4.2] * 31 + [7])
+    for d in range(1, LAST + 1):
+        cell = ot.cell(4, 3 + d, "월화수목금토일"[wk(d)])
+        cell.alignment, cell.font = CENTER, Font(color="E63C12" if wk(d) >= 5 else "6B6460", size=9)
+    rows = [("김예시", "E101", {6: 2, 7: 2, 8: 1.5}), ("이샘플", "E102", {1: 1, 13: 1})]
+    for n, (name, eid, h) in enumerate(rows, 1):
+        rr = 4 + n
+        for c, v in enumerate([n, name, eid], 1):
+            cell = ot.cell(rr, c, v)
+            cell.fill, cell.border = EXAMPLE, BOX
+        for d in range(1, LAST + 1):
+            cell = ot.cell(rr, 3 + d, h.get(d))
+            cell.fill, cell.border, cell.alignment = EXAMPLE, BOX, CENTER
+        ot.cell(rr, 35, f"=SUM(D{rr}:{get_column_letter(3 + LAST)}{rr})").border = BOX
+    dvn = DataValidation(type="decimal", operator="between", formula1="0", formula2="24", allow_blank=True,
+                         showErrorMessage=True, errorTitle="시간", error="0~24 사이 숫자(시간)를 넣어 주세요. 30분은 0.5")
+    ot.add_data_validation(dvn)
+    dvn.add(f"D5:AH305")
+    ot.freeze_panes = "D5"
+    wb.move_sheet("시간외", offset=-(len(wb.sheetnames) - 1))
+    wb.move_sheet("근무현황", offset=-(len(wb.sheetnames) - 1))
+    wb.active = 0
+    path = OUT / "attendance-std-status.xlsx"
+    wb.save(path)
+    return path
+
+
 if __name__ == "__main__":
-    for p in (daily(), clock()):
+    for p in (daily(), clock(), status()):
         print("wrote", p)
