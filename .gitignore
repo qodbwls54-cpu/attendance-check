@@ -5,3 +5,4 @@
 .env*
 supabase/.temp/
 _site/
+!templates/*.xlsx

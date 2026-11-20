@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "rm -rf _site && mkdir _site && cp index.html config.js _site/",
+  "buildCommand": "rm -rf _site && mkdir _site && cp index.html config.js _site/ && mkdir _site/templates && cp templates/*.xlsx _site/templates/",
   "outputDirectory": "_site",
   "installCommand": "",
   "framework": null,

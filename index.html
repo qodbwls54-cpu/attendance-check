@@ -56,7 +56,11 @@ tr.emp{cursor:pointer}tr.emp:hover td{background:var(--soft)}
 .card h3{margin:0 0 8px;font-size:17px}.grid2{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center}
 .rules p,.rules li{max-width:75ch}.rules h3{margin:22px 0 6px}
 textarea{width:100%;min-height:180px;font:14px/1.5 ui-monospace,monospace;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);color:var(--ink)}
-.empty{padding:40px 0;color:var(--mute)}.note{font-size:13px;color:var(--mute)}
+.empty{padding:40px 0;color:var(--mute)}
+.issues{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:16px;font-size:14px}
+.issues.bad{border-left-color:var(--red)}.issues summary{cursor:pointer;margin-top:8px;min-height:32px;display:flex;align-items:center}
+.tpl{margin:14px 0 0;font-size:14px;color:light-dark(#cfc8c3,#5a524d);display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
+.tpl a{color:inherit;font-weight:600;text-underline-offset:3px;min-height:32px;display:inline-flex;align-items:center}.note{font-size:13px;color:var(--mute)}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.on{opacity:1}
 .auth{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:14px;color:light-dark(#cfc8c3,#5a524d)}
@@ -74,16 +78,20 @@ textarea{width:100%;min-height:180px;font:14px/1.5 ui-monospace,monospace;border
   <h1>근태 적법성 점검</h1>
   <p>사업장별 출근부 엑셀을 올리면 주 52시간 초과, 연장·야간·휴일근로수당 지급 대상, 휴일대체 처리 여부를 직원별로 판정합니다. 파일은 이 브라우저 안에서만 읽고 어디로도 보내지 않습니다.</p>
   <label class="drop" id="drop" for="file">
-    <div style="flex:1 1 260px"><b>근태 엑셀 파일을 끌어다 놓거나 눌러서 선택</b><small>시트마다 양식이 달라도 됩니다 — 근태코드형(1·휴무·OT…)과 출퇴근시각형(06:00~20:00)을 자동 인식</small></div>
+    <div style="flex:1 1 260px"><b>근태 엑셀 파일을 끌어다 놓거나 눌러서 선택</b><small>표준 양식은 칸 단위로 검증합니다. 다른 양식은 근태코드형·출퇴근시각형을 자동 인식하되, 추정이 들어간 부분을 경고로 알려 줍니다</small></div>
     <span class="btn" style="display:inline-flex;align-items:center;background:var(--red);color:#fff;border-color:var(--red)">파일 선택</span>
     <input type="file" id="file" accept=".xlsx,.xls,.xlsm" hidden>
   </label>
+  <p class="tpl">표준 양식 받기 — 이 양식으로 올리면 칸 단위로 검증합니다:
+    <a href="templates/attendance-std-daily.xlsx" download="근태표준양식_1_일별근태표.xlsx">① 일별 근태표 (근태코드 + 시간)</a>
+    <a href="templates/attendance-std-clock.xlsx" download="근태표준양식_2_출퇴근기록.xlsx">② 출퇴근 기록 (하루 한 줄)</a></p>
   <p id="fileinfo" class="note" style="color:inherit;opacity:.8"></p>
   <form id="auth" class="auth" onsubmit="return false"></form>
 </div></header>
 
 <main class="band"><div class="wrap">
   <section id="kpis" class="kpis" aria-live="polite"></section>
+  <section id="issues" class="issues" hidden aria-live="polite"></section>
   <nav class="tabs" role="tablist">
     <button role="tab" data-t="res" aria-selected="true">판정 결과</button>
     <button role="tab" data-t="site">사업장 설정</button>
@@ -130,6 +138,11 @@ textarea{width:100%;min-height:180px;font:14px/1.5 ui-monospace,monospace;border
       <li><b>상시 5인 미만</b>: 연장·야간·휴일 가산, 52시간 제한, 공휴일 유급이 적용되지 않아 시간만 집계합니다.</li>
     </ul>
     <p class="note">이 도구는 출근부에 적힌 내용만으로 판정합니다. 근로계약상 소정근로시간, 휴게시간 실제 부여, 보상휴가제 서면합의 여부는 자료로 확인할 수 없어 "확인 필요"로 남깁니다. 최종 판단은 노무사 검토를 권합니다.</p>
+    <h3>양식 검증</h3>
+    <ul>
+      <li><b>표준 양식</b>(위의 ①·②): 설정 시트의 사업장·대상월로 날짜를 확정하고, 근태코드·시간·일자·사업장 이름을 칸 단위로 검사합니다. 틀린 칸은 "근태표 K12"처럼 위치를 알려 줍니다.</li>
+      <li><b>그 밖의 양식</b>: 날짜 줄과 성명 열을 찾아 읽습니다. 연·월 표시가 없거나, 이름 없는 행(연장·야간·퇴근 행)에 값이 있거나, 숫자가 일수인지 시간인지 섞여 있으면 경고합니다. 급여대장·연차대장처럼 날짜 줄이 없는 시트는 건너뜁니다.</li>
+    </ul>
     <h2 style="margin-top:28px">공휴일 목록</h2>
     <p class="note">한 줄에 "YYYY-MM-DD 이름". 노동절(매년 5/1)은 자동 적용됩니다. 임시공휴일이 생기면 여기에 추가하세요.</p>
     <textarea id="holText" aria-label="공휴일 목록"></textarea>
@@ -150,7 +163,7 @@ const serialOf=(y,m,d)=>Math.round((Date.UTC(y,m-1,d)-EPOCH)/DAYMS);
 const norm=v=>String(v??'').replace(/\s+/g,'');
 const md=s=>{const k=keyOf(s);return +k.slice(5,7)+'/'+ +k.slice(8)};
 const r2=x=>Math.round(x*100)/100;
-const KIND={work:'근무',holwork:'휴일근무',half:'반차(4h 근무)',off:'휴무',sub:'대체휴무·대휴',leave:'휴가·병가',absent:'결근',none:'기록 없음',unknown:'미확인'};
+const KIND={work:'근무',holwork:'휴일근무',half:'반차(4h 근무)',off:'휴무',sub:'대체휴무·대휴',leave:'휴가·병가',absent:'결근',out:'재직 아님(입사 전·퇴사 후)',none:'기록 없음',unknown:'미확인'};
 function guessCode(c){
   const n=norm(c).replace(/\(.*?\)/g,'');
   if(c==='(빈칸)')return{kind:'none',h:0,n:0};
@@ -160,7 +173,8 @@ function guessCode(c){
   let m=n.match(/^휴근(\d+(\.\d+)?)$/);if(m)return{kind:'holwork',h:+m[1],n:0};
   if(/^(휴근|휴일근무|휴출|특근|휴일출근)$/.test(n))return{kind:'holwork',h:8,n:0};
   if(/야간|심야/.test(n))return{kind:'work',h:8,n:8};
-  if(/^(OT|연장|교육|출장|근무|출근|정상|주간|O|○|◯)$/i.test(n))return{kind:'work',h:8,n:0};
+  if(/^(OT|연장|교육|출장|근무|출근|출|정상|주간|O|○|◯)$/i.test(n))return{kind:'work',h:8,n:0};
+  if(/^(입사전|입사前|미입사|퇴사|퇴직|퇴사후)/.test(n))return{kind:'out',h:0,n:0};
   if(/^(대휴|대체|대체휴무|대체휴일|보상휴가|휴일대체)$/.test(n))return{kind:'sub',h:0,n:0};
   if(/반차|반휴|오전반|오후반/.test(n))return{kind:'half',h:4,n:0};
   if(/^(휴무|휴|휴일|토|일|공휴|공휴일|비번|off|주휴|무급휴무)$/i.test(n))return{kind:'off',h:0,n:0};
@@ -178,25 +192,151 @@ function findDateRow(rows){
   for(let r=0;r<L;r++){const row=rows[r]||[];for(let c=0;c<row.length;c++){if(row[c]===1){let k=c;while(row[k+1]===row[k]+1)k++;const n=k-c+1;if(n>=28&&n<=31)return{r,c0:c,c1:k,mode:'day'}}}}
   return null;
 }
-function findMonth(rows){for(let r=0;r<Math.min(rows.length,4);r++)for(const v of rows[r]||[]){const m=String(v??'').match(/(\d{2,4})\s*년\s*(\d{1,2})\s*월/);if(m){let y=+m[1];if(y<100)y+=2000;return{y,m:+m[2]}}}return null}
-function parseGrid(name,rows,dr,defMonth){
+function findMonth(rows,name,def){for(let r=0;r<Math.min(rows.length,4);r++)for(const v of rows[r]||[]){const m=String(v??'').match(/(\d{2,4})\s*년\s*(\d{1,2})\s*월/);if(m){let y=+m[1];if(y<100)y+=2000;return{y,m:+m[2],src:'text'}}}
+  for(let r=0;r<Math.min(rows.length,4);r++)for(const v of rows[r]||[])if(typeof v==='number'&&Number.isInteger(v)&&v>40000&&v<60000){const k=keyOf(v);return{y:+k.slice(0,4),m:+k.slice(5,7),src:'cell'}}
+  const m=String(name||'').match(/(?:^|\D)(\d{1,2})\s*월/);if(m&&+m[1]>=1&&+m[1]<=12)return{y:def?.y||new Date().getFullYear(),m:+m[1],src:'name'};return null}
+function parseGrid(name,rows,dr,defMonth,fixed){
   let nameCol=-1,hdr=dr.r;
   for(let r=Math.max(0,dr.r-2);r<=dr.r+1&&nameCol<0;r++)(rows[r]||[]).forEach((v,c)=>{if(nameCol<0&&c<dr.c0&&/^(성명|이름)$/.test(norm(v))){nameCol=c;hdr=r}});
   if(nameCol<0)return{error:'성명/이름 열을 찾지 못했습니다'};
   let month=null,serials=[];
   if(dr.mode==='serial'){for(let c=dr.c0;c<=dr.c1;c++)serials.push(rows[dr.r][c]);const k=keyOf(serials[0]);month={y:+k.slice(0,4),m:+k.slice(5,7)}}
-  else{month=findMonth(rows)||defMonth;const last=new Date(Date.UTC(month.y,month.m,0)).getUTCDate();for(let c=dr.c0;c<=dr.c1;c++){const d=rows[dr.r][c];serials.push(d<=last?serialOf(month.y,month.m,d):null)}}
+  let msrc='serial';
+  if(dr.mode!=='serial'){const f=fixed?{...fixed,src:'user'}:findMonth(rows,name,defMonth);msrc=f?.src||'guess';month={y:(f||defMonth).y,m:(f||defMonth).m}}
+  if(dr.mode!=='serial'){const last=new Date(Date.UTC(month.y,month.m,0)).getUTCDate();for(let c=dr.c0;c<=dr.c1;c++){const d=rows[dr.r][c];serials.push(d<=last?serialOf(month.y,month.m,d):null)}}
   const metaCols=[];for(let c=0;c<dr.c0;c++){const lab=norm(rows[hdr]?.[c])||norm(rows[hdr-1]?.[c]);if(META.includes(lab))metaCols.push([c,lab])}
   const emps=[];const start=Math.max(dr.r,hdr)+1;
+  let orphan=0;
   for(let i=start;i<rows.length;i++){const row=rows[i]||[];const nm=row[nameCol];
-    if(typeof nm!=='string'||!nm.trim()||/^(성명|이름|계|합계|소계|총계)$/.test(nm.trim()))continue;
+    if(typeof nm!=='string'||!nm.trim()||/^(성명|이름|계|합계|소계|총계)$/.test(nm.trim())){
+      if(emps.length&&!(typeof nm==='string'&&/^(계|합계|소계|총계)$/.test(nm.trim()))){let f=0;serials.forEach((s,j)=>{const v=row[dr.c0+j];if(s!=null&&v!=null&&v!=='')f++});if(f>=3)orphan++}
+      continue}
     const days=[];let filled=0;
     serials.forEach((s,j)=>{if(s==null)return;const v=row[dr.c0+j];if(v!=null&&v!=='')filled++;days.push({s,code:cellCode(v)})});
     if(!filled)continue;
     const meta={};metaCols.forEach(([c,l])=>{if(row[c]!=null&&row[c]!=='')meta[l]=String(row[c])});
     emps.push({name:nm.trim(),meta,days});
   }
-  return{format:'grid',month,emps};
+  const issues=[],W=(msg,x={})=>issues.push({lv:'warn',sheet:name,cell:'',msg,...x});
+  if(msrc==='cell')W(`날짜 칸에 연·월이 없어 상단의 기준일 칸에서 ${month.y}년 ${month.m}월로 읽었습니다 — 맞는지 확인`,{month:true});
+  if(msrc==='name')W(`날짜 칸에 연·월이 없어 시트 이름에서 ${month.m}월로 읽고 연도는 ${month.y}년으로 가정했습니다 — 사업장 설정에서 대상월 확인`,{month:true});
+  if(msrc==='guess')W(`날짜 칸에 연·월 표시가 없어 ${month.y}년 ${month.m}월로 가정했습니다 — 요일·공휴일이 틀릴 수 있으니 사업장 설정에서 대상월을 바로잡아 주세요`,{month:true});
+  if(orphan)W(`이름 없는 행 ${orphan}개에 날짜별 값이 있지만 읽지 않았습니다 (연장·야간·휴일·퇴근 행이 따로 있는 다중행 양식으로 보임) — 그 시간은 판정에 빠집니다`);
+  let le1=0,gt1=0;emps.forEach(e=>e.days.forEach(d=>{if(/^\d+(\.\d+)?$/.test(d.code)){const x=+d.code;if(x>0&&x<=1)le1++;else if(x>1)gt1++}}));
+  if(le1&&gt1)W(`숫자 칸에 1 이하(${le1}칸, 일수로 해석)와 1 초과(${gt1}칸, 시간으로 해석)가 섞여 있습니다 — 숫자가 출근 일수인지 시간인지 불명확`);
+  if(/연장|OT|초과|잔업|특근/i.test(name))W('시트 이름으로 보아 연장·OT 시간 집계표입니다 — 칸의 숫자를 하루 근로시간으로 읽으므로 판정이 틀립니다. 출근부와 합쳐 표준 양식으로 올려 주세요');
+  return{format:'grid',month,emps,issues,_src:dr.mode==='serial'?null:{rows,dr}};
+}
+/* ── 표준 양식 (근태표준양식 v1): 설정 + 근태표 / 출퇴근 시트, 칸 단위로 엄격 검증 ── */
+const STD_MARK='근태표준양식';
+const STD_CODE={근무:'work',출근:'work',출:'work',휴근:'holwork',휴일근무:'holwork',반차:'half',휴무:'off',주휴:'off',대휴:'sub',연차:'leave',병가:'leave',경조:'leave',공가:'leave',휴가:'leave',휴직:'leave',결근:'absent',입사전:'out',퇴사:'out'};
+const STD_LIST='근무·휴근·반차·휴무·주휴·대휴·연차·병가·경조·공가·휴가·휴직·결근·입사전·퇴사';
+const DEF_H={work:8,holwork:8,half:4};
+function isStd(wb){const ws=wb.Sheets['설정'];if(!ws)return false;return XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null}).slice(0,3).some(r=>(r||[]).some(v=>String(v??'').includes(STD_MARK)))}
+const A1=(r,c)=>c>=0?XLSX.utils.encode_cell({r,c}):'';
+const yes=v=>/^(y|yes|o|○|예|해당|v|✔|true|1)$/i.test(norm(v));
+function stdMonth(v){if(typeof v==='number'){if(v>40000&&v<60000){const k=keyOf(v);return{y:+k.slice(0,4),m:+k.slice(5,7)}}return null}
+  const m=String(v??'').match(/(\d{4})\s*[-./년]\s*(\d{1,2})/);return m&&+m[2]>=1&&+m[2]<=12?{y:+m[1],m:+m[2]}:null}
+function stdNum(v){if(v==null||v==='')return null;if(typeof v==='number')return v<0?NaN:v;const s=String(v).trim();if(!s)return null;
+  const m=s.match(/^(\d{1,2}):(\d{2})$/);if(m)return +m[1]+ +m[2]/60;return /^\d+(\.\d+)?$/.test(s)?+s:NaN}
+function stdTime(v){if(v==null||v==='')return null;if(typeof v==='number'){if(v>=0&&v<1)return v;if(v>40000&&v<60000)return v-Math.floor(v);return NaN}
+  const m=String(v).trim().match(/^(\d{1,2}):(\d{2})(:\d{2})?$/);if(!m||+m[1]>24||+m[2]>59)return NaN;return(+m[1]*60+ +m[2])/1440}
+function stdDate(v){if(typeof v==='number'&&v>40000&&v<60000)return Math.floor(v);const m=String(v??'').trim().match(/^(\d{4})[-./]\s*(\d{1,2})[-./]\s*(\d{1,2})/);return m?serialOf(+m[1],+m[2],+m[3]):null}
+function hdrRow(rows,need){for(let r=0;r<Math.min(rows.length,15);r++){const H=(rows[r]||[]).map(norm);if(need.every(k=>H.includes(k)))return{r,H}}return null}
+const hhmm=x=>{const m=Math.round(x*1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
+function parseStd(wb){
+  const issues=[],I=(lv,sheet,cell,msg)=>issues.push({lv,sheet,cell,msg});
+  const read=sn=>XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null});
+  const sr=read('설정'),h0=hdrRow(sr,['사업장','대상월']),sites=new Map();
+  if(!h0){I('err','설정','','"사업장"·"대상월" 머리글 행을 찾지 못했습니다');return{std:true,sites:[],issues}}
+  const fx=p=>h0.H.findIndex(x=>x.startsWith(p));const cS=fx('사업장'),cM=fx('대상월'),c5=fx('상시5인'),cF=fx('탄력'),cW=fx('주휴일'),cSat=fx('토요일');
+  for(let i=h0.r+1;i<sr.length;i++){const r=sr[i]||[];const nm=String(r[cS]??'').trim();if(!nm||/^예\)/.test(nm))continue;
+    if(sites.has(nm)){I('err','설정',A1(i,cS),`사업장 "${nm}"이 두 번 적혀 있습니다`);continue}
+    const month=stdMonth(r[cM]);if(!month){I('err','설정',A1(i,cM),`"${nm}" 대상월 "${r[cM]??''}"을 읽을 수 없습니다 (예: 2026-10)`);continue}
+    const wv=norm(r[cW]);const weekly=/^토/.test(wv)?'sat':/교대|지정|순환/.test(wv)?'shift':'sun';
+    if(wv&&!/^(일|토|교대|지정|순환)/.test(wv))I('warn','설정',A1(i,cW),`주휴일 "${r[cW]}"을 알 수 없어 일요일로 봅니다`);
+    const sz=c5>=0?norm(r[c5]):'';
+    sites.set(nm,{name:nm,format:'std',std:true,month,empMap:new Map(),stdSet:{size5:sz?yes(sz):true,flex:cF>=0&&yes(r[cF]),satHol:cSat>=0&&yes(r[cSat]),weekly,blankWork:false}})}
+  if(!sites.size){I('err','설정','','설정 시트에 사업장이 없습니다');return{std:true,sites:[],issues}}
+  const only=sites.size===1?[...sites.values()][0]:null;
+  const getSite=(v,sheet,cell)=>{const nm=String(v??'').trim();if(!nm){if(only)return only;I('err',sheet,cell,'사업장이 비어 있습니다 (설정에 사업장이 여러 개면 꼭 적어야 함)');return null}
+    const s=sites.get(nm);if(!s)I('err',sheet,cell,`"${nm}"은 설정 시트에 없는 사업장입니다`);return s||null};
+  const getEmp=(s,name,id,job,fl)=>{const key=id?'#'+id:name;let e=s.empMap.get(key);
+    if(!e){e={name,meta:{},days:new Map(),stdFlags:{gamdan:false,shift:false,ultra:null},blank:0};s.empMap.set(key,e)}
+    if(job)e.meta.직무=job;if(fl.gamdan)e.stdFlags.gamdan=true;if(fl.shift)e.stdFlags.shift=true;if(fl.ultra)e.stdFlags.ultra=true;return e};
+  const flagsOf=(r,H)=>{const f=p=>H.findIndex(x=>x.startsWith(p));const g=f('감단')>=0?f('감단'):f('감시');return{gamdan:g>=0&&yes(r[g]),shift:f('교대')>=0&&yes(r[f('교대')]),ultra:f('초단기')>=0&&yes(r[f('초단기')])}};
+  const setDay=(e,serial,day,sheet,cell)=>{if(e.days.has(serial)){I('err',sheet,cell,`${e.name} ${keyOf(serial)} 기록이 중복됩니다`);return}e.days.set(serial,day)};
+  const compute=(sheet,cell,e,dlab,code,hours,ot,night,cH,cN)=>{const c=norm(code);let kind;cH=cH||cell;cN=cN||cell;
+    if(!c){if((hours||0)>0||(ot||0)>0)kind='work';else return null}
+    else{kind=STD_CODE[c];if(!kind){I('err',sheet,cell,`${e.name} ${dlab}: "${code}"는 표준 근태코드가 아닙니다 (${STD_LIST})`);kind='unknown'}}
+    const works=['work','holwork','half'].includes(kind);
+    if(!works&&kind!=='unknown'&&((hours||0)>0||(ot||0)>0))I('err',sheet,cell,`${e.name} ${dlab}: "${code}"인데 근로시간이 있습니다 — 일했다면 근무·휴근으로 적어 주세요`);
+    let h=works?(hours!=null?hours:DEF_H[kind]+(ot||0)):0,n=works?(night||0):0;
+    if(h>24){I('err',sheet,cH,`${e.name} ${dlab}: 하루 근로시간 ${r2(h)}h가 24시간을 넘습니다`);h=24}
+    if(n>h){I('err',sheet,cN,`${e.name} ${dlab}: 야간시간 ${r2(n)}h가 근로시간 ${r2(h)}h보다 큽니다`);n=h}
+    return{code:c||'근무',kind,h:r2(h),n:r2(n),std:true}};
+  let any=false,noBreak=0,noBreakSheet='';
+  for(const sn of wb.SheetNames){
+    if(/^근태표/.test(sn)){any=true;const rows=read(sn),h=hdrRow(rows,['성명','구분']);if(!h){I('err',sn,'','"성명"·"구분" 머리글 행을 찾지 못했습니다');continue}
+      const H=h.H,ci=k=>H.indexOf(k),dc={};H.forEach((x,c)=>{if(/^\d{1,2}$/.test(x)&&+x>=1&&+x<=31&&dc[+x]==null)dc[+x]=c});
+      if(dc[1]==null||dc[28]==null){I('err',sn,'','머리글에 1~31 날짜 열이 없습니다');continue}
+      const cSite=ci('사업장'),cName=ci('성명'),cId=ci('사번'),cJob=ci('직무'),cG=ci('구분');let cur=null,skip=false;
+      const flush=()=>{if(!cur)return;const {s,e}=cur,last=new Date(Date.UTC(s.month.y,s.month.m,0)).getUTCDate();
+        for(let d=1;d<=31;d++){const c=dc[d];if(c==null)continue;const get=k=>cur.rows[k]?.[c];const has=k=>get(k)!=null&&get(k)!=='';
+          if(d>last){if(['근태','근로시간','연장','야간'].some(has))I('err',sn,A1(cur.r0,c),`${e.name}: ${s.month.m}월에는 ${d}일이 없습니다`);continue}
+          const num=k=>{const v=stdNum(get(k));if(Number.isNaN(v)){I('err',sn,A1(cur.rr[k],c),`${e.name} ${d}일 ${k} "${get(k)}"은 숫자가 아닙니다`);return null}return v};
+          const serial=serialOf(s.month.y,s.month.m,d),day=compute(sn,A1(cur.r0,c),e,d+'일',get('근태'),num('근로시간'),num('연장'),num('야간'),A1(cur.rr['근로시간']??cur.rr['연장']??cur.r0,c),A1(cur.rr['야간']??cur.r0,c));
+          if(!day){e.blank++;setDay(e,serial,{code:'(빈칸)',kind:'off',h:0,n:0,std:true},sn,A1(cur.r0,c));continue}
+          setDay(e,serial,day,sn,A1(cur.r0,c))}cur=null};
+      for(let i=h.r+1;i<rows.length;i++){const r=rows[i]||[],g=norm(r[cG]),nm=String(r[cName]??'').trim();
+        const hasVal=Object.values(dc).some(c=>r[c]!=null&&r[c]!=='');
+        if(!nm&&!hasVal){if(/^근태/.test(g)){flush();skip=false}continue}
+        const kind=/^근태/.test(g)?'근태':/^근로/.test(g)?'근로시간':/^연장/.test(g)?'연장':/^(야간|심야)/.test(g)?'야간':null;
+        if(!kind){I('err',sn,A1(i,cG),`구분 "${r[cG]??''}"은 근태·근로시간·연장·야간 중 하나여야 합니다`);continue}
+        if(kind==='근태'||(nm&&cur&&nm!==cur.e.name)){flush();skip=false;
+          if(!nm){I('err',sn,A1(i,cName),'성명이 비어 있는데 값이 있습니다');skip=true;continue}
+          const s=getSite(cSite>=0?r[cSite]:'',sn,A1(i,cSite));if(!s){skip=true;continue}
+          const e=getEmp(s,nm,cId>=0?String(r[cId]??'').trim():'',cJob>=0?String(r[cJob]??'').trim():'',flagsOf(r,H));cur={s,e,rows:{},rr:{},r0:i}}
+        if(skip)continue;
+        if(!cur){I('err',sn,A1(i,cG),'"근태" 행 없이 시간 행이 먼저 나왔습니다');continue}
+        if(cur.rows[kind]){I('err',sn,A1(i,cG),`${cur.e.name}: "${kind}" 행이 두 번 있습니다`);continue}
+        cur.rows[kind]=r;cur.rr[kind]=i;if(kind==='근태')cur.r0=i}
+      flush()}
+    else if(/^출퇴근/.test(sn)){any=true;const rows=read(sn),h=hdrRow(rows,['성명','일자']);if(!h){I('err',sn,'','"성명"·"일자" 머리글 행을 찾지 못했습니다');continue}
+      const H=h.H,ci=k=>H.indexOf(k),fx=p=>H.findIndex(x=>x.startsWith(p));
+      const cSite=ci('사업장'),cName=ci('성명'),cId=ci('사번'),cJob=ci('직무'),cD=ci('일자'),cC=ci('근태'),cIn=ci('출근'),cOut=ci('퇴근'),cB=fx('휴게'),cH=fx('근로시간'),cN=fx('야간');
+      for(let i=h.r+1;i<rows.length;i++){const r=rows[i]||[],nm=String(r[cName]??'').trim(),dv=r[cD];
+        if(!nm&&(dv==null||dv===''))continue;
+        if(!nm){I('err',sn,A1(i,cName),'성명이 비어 있습니다');continue}
+        const serial=stdDate(dv);if(serial==null){I('err',sn,A1(i,cD),`${nm}: 일자 "${dv??''}"를 읽을 수 없습니다 (예: 2026-10-01)`);continue}
+        const s=getSite(cSite>=0?r[cSite]:'',sn,A1(i,cSite));if(!s)continue;
+        const k=keyOf(serial);if(+k.slice(0,4)!==s.month.y||+k.slice(5,7)!==s.month.m){I('err',sn,A1(i,cD),`${nm} ${k}는 대상월(${s.month.y}-${String(s.month.m).padStart(2,'0')})이 아닙니다`);continue}
+        const e=getEmp(s,nm,cId>=0?String(r[cId]??'').trim():'',cJob>=0?String(r[cJob]??'').trim():'',flagsOf(r,H));
+        const a=cIn>=0?stdTime(r[cIn]):null,b=cOut>=0?stdTime(r[cOut]):null;
+        if(Number.isNaN(a)||Number.isNaN(b)){I('err',sn,A1(i,Number.isNaN(a)?cIn:cOut),`${nm} ${k}: 출퇴근 시각을 읽을 수 없습니다 (예: 09:00)`);continue}
+        let hours=cH>=0?stdNum(r[cH]):null,night=cN>=0?stdNum(r[cN]):null;
+        if(Number.isNaN(hours)||Number.isNaN(night)){I('err',sn,A1(i,Number.isNaN(hours)?cH:cN),`${nm} ${k}: 근로시간·야간시간은 숫자로 적어 주세요`);continue}
+        let tag='';
+        if((a==null)!==(b==null)){I('err',sn,A1(i,a==null?cIn:cOut),`${nm} ${k}: 출근·퇴근 중 하나만 있습니다`);continue}
+        if(a!=null){const A=serial+a;let B=serial+b;if(B<=A)B+=1;const span=(B-A)*24;let brk=cB>=0?stdNum(r[cB]):null;
+          if(Number.isNaN(brk)){I('err',sn,A1(i,cB),`${nm} ${k}: 휴게(분)는 숫자로 적어 주세요`);brk=null}
+          if(brk==null){brk=span>=8?60:span>=4?30:0;if(hours==null){noBreak++;noBreakSheet=sn}}
+          if(hours==null)hours=Math.max(0,span-brk/60);if(night==null)night=Math.min(nightOverlap(A,B),hours);tag=hhmm(a)+'~'+hhmm(b)}
+        const day=compute(sn,A1(i,cC>=0?cC:cD),e,k.slice(5),cC>=0?r[cC]:'',hours,null,night,A1(i,cH>=0?cH:cOut),A1(i,cN>=0?cN:cOut));
+        if(!day){setDay(e,serial,{code:'(빈칸)',kind:'off',h:0,n:0,std:true},sn,A1(i,cD));e.blank++;continue}
+        if(tag)day.code=tag;setDay(e,serial,day,sn,A1(i,cD))}}}
+  if(!any)I('err','','','"근태표" 또는 "출퇴근"으로 시작하는 시트가 없습니다');
+  if(noBreak)I('warn',noBreakSheet,'',`휴게(분)이 빈 출퇴근 ${noBreak}건은 법정 최소 휴게(4시간 이상 30분, 8시간 이상 60분)를 빼고 계산했습니다`);
+  const out=[];
+  for(const s of sites.values()){const last=new Date(Date.UTC(s.month.y,s.month.m,0)).getUTCDate(),miss=[];
+    s.emps=[...s.empMap.values()].map(e=>{let m=e.blank;
+      for(let d=1;d<=last;d++){const ser=serialOf(s.month.y,s.month.m,d);if(!e.days.has(ser)){m++;e.days.set(ser,{code:'(기록없음)',kind:'off',h:0,n:0,std:true})}}
+      if(m)miss.push(`${e.name} ${m}일`);
+      return{name:e.name,meta:e.meta,stdFlags:e.stdFlags,days:[...e.days.entries()].map(([sv,d])=>({s:sv,...d}))}});
+    if(miss.length)I('warn',s.name,'',`근태가 비어 있는 날은 휴무로 봅니다 — ${miss.slice(0,10).join(', ')}${miss.length>10?` 외 ${miss.length-10}명`:''}. 입사 전·퇴사 후는 "입사전"·"퇴사"로 적어 주세요`);
+    if(!s.emps.length)I('warn','설정','',`"${s.name}"에 직원 기록이 없습니다`);
+    delete s.empMap;out.push(s)}
+  return{std:true,sites:out,issues};
 }
 function tval(v,date){if(typeof v==='number'){if(v>40000)return v;if(v>0&&v<1)return date+v;return null}
   const m=String(v??'').match(/^\s*(\d{1,2}):(\d{2})/);return m?date+(+m[1]*60+ +m[2])/1440:null}
@@ -234,18 +374,19 @@ function guessFlags(site,e){const t=Object.values(e.meta).join(' ');
   return{gamdan:/경비|감시|단속|보안|당직|감단/.test(t),shift:site.set.weekly==='shift'||/교대|조|야간/.test(t)||e.days.some(d=>/야간/.test(d.code)),ultra:null}}
 function resolve(d,site,codes){
   if(d.fromTime)return{kind:'work',h:d.h,n:d.n};
+  if(d.std)return{kind:d.kind,h:d.h,n:d.n};
   let c=d.code;if(c==='(빈칸)'&&site.set.blankWork)c='(빈칸=근무)';
   const e=codes[c]||guessCode(c);const h=['work','holwork','half'].includes(e.kind)?(+e.h||0):0;
   return{kind:e.kind,h,n:Math.min(+e.n||0,h)};
 }
 function analyze(site,emp,codes,hol){
   const S=site.set,F=emp.flags;
-  const ds=emp.days.map(d=>({...d,...resolve(d,site,codes)})).sort((a,b)=>a.s-b.s);
+  const ds=emp.days.map(d=>({...d,...resolve(d,site,codes)})).filter(d=>d.kind!=='out').sort((a,b)=>a.s-b.s);
   ds.forEach(d=>{d.wd=wdOf(d.s);d.wk=d.s-((d.wd+6)%7);d.hol=holidayOf(d.s,hol);d.worked=d.h>0});
   const weeks=new Map();ds.forEach(d=>{if(!weeks.has(d.wk))weeks.set(d.wk,[]);weeks.get(d.wk).push(d)});
   if(F.ultra==null){const full=[...weeks.values()].filter(a=>a.length===7);const sch=d=>d.h+(['leave','absent','sub'].includes(d.kind)?8:0);const avg=full.length?full.reduce((t,a)=>t+a.reduce((x,d)=>x+sch(d),0),0)/full.length:99;F.ultra=avg>0&&avg<15}
-  for(const arr of weeks.values()){let w=null;
-    if(S.weekly==='shift'){const o=arr.filter(d=>d.kind==='off');w=o.length?o[o.length-1]:null;if(!w){const hw=arr.filter(d=>d.kind==='holwork');w=hw.length?hw[hw.length-1]:null}}
+  for(const arr of weeks.values()){let w=arr.find(d=>norm(d.code)==='주휴')||null;
+    if(w);else if(S.weekly==='shift'){const o=arr.filter(d=>d.kind==='off');w=o.length?o[o.length-1]:null;if(!w){const hw=arr.filter(d=>d.kind==='holwork');w=hw.length?hw[hw.length-1]:null}}
     else{const t=S.weekly==='sat'?6:0;w=arr.find(d=>d.wd===t)||null}
     if(w)w.weekly=true}
   ds.forEach(d=>{let t='';if(d.hol?.type==='labor')t='labor';else if(d.hol&&S.size5)t='public';else if(d.weekly)t='weekly';else if(S.satHol&&d.wd===6)t='agreed';
@@ -288,6 +429,14 @@ function analyze(site,emp,codes,hol){
   return R;
 }
 function parseWorkbook(wb){
+  if(isStd(wb))return parseStd(wb);
+  const out=legacyWorkbook(wb),issues=[],skipped=[],sites=[];
+  out.forEach(s=>{if(s.error){if(/날짜 행/.test(s.error))skipped.push(s.name);else issues.push({lv:'warn',sheet:s.name,cell:'',msg:'근태표로 보이지만 읽지 못했습니다 — '+s.error});return}
+    if(!s.emps.length){skipped.push(s.name);return}
+    (s.issues||[]).forEach(x=>issues.push(x));sites.push(s)});
+  return{std:false,sites,issues,skipped};
+}
+function legacyWorkbook(wb){
   const out=[];let def=null;const pending=[];
   wb.SheetNames.forEach(sn=>{const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null});
     let p=parseTime(sn,rows);
@@ -338,8 +487,7 @@ async function onSession(session){
   applySaved();renderAuth()}
 function applySaved(){
   st.hol=saved('holidays')||{...HOL0};holToText();
-  st.sites.forEach(s=>{if(s.error)return;s.set={...guessSite(s),...(saved('site:'+s.name)||{})};
-    s.emps.forEach(e=>e.flags={...guessFlags(s,e),...(saved('emp:'+s.name+'|'+e.name)||{})})});
+  st.sites.forEach(initSite);
   if(st.sites.length)buildCodes();renderAll()}
 function renderAuth(){const el=$('#auth');
   if(!DB.sb){el.innerHTML=`<span><span class="dot"></span>설정 저장: 이 브라우저에만${CFG.supabaseUrl&&typeof supabase==='undefined'?' (Supabase 모듈을 불러오지 못함)':''}</span>`;return}
@@ -359,24 +507,37 @@ function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clea
 function load(file){
   if(typeof XLSX==='undefined'){toast('엑셀 읽기 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도하세요');return}
   const fr=new FileReader();fr.onload=()=>{try{
-    const wb=XLSX.read(new Uint8Array(fr.result),{type:'array'});const parsed=parseWorkbook(wb);
-    st.sites=parsed.map((p,i)=>{const s={id:i,...p,emps:(p.emps||[]).map((e,j)=>({...e,id:i+'-'+j}))};if(!p.error){s.set={...guessSite(s),...(saved('site:'+s.name)||{})};s.emps.forEach(e=>e.flags={...guessFlags(s,e),...(saved('emp:'+s.name+'|'+e.name)||{})})}return s});
+    const wb=XLSX.read(new Uint8Array(fr.result),{type:'array'});const P=parseWorkbook(wb);
+    st.std=P.std;st.issues=P.issues||[];st.skipped=P.skipped||[];st.file=file.name;
+    st.sites=P.sites.map((p,i)=>{const s={id:i,...p,emps:p.emps.map((e,j)=>({...e,id:i+'-'+j}))};initSite(s);return s});
     buildCodes();st.open.clear();
-    const ok=st.sites.filter(s=>!s.error);
-    $('#fileinfo').textContent=`${file.name} · 시트 ${st.sites.length}개 중 ${ok.length}개 인식 · 직원 ${ok.reduce((t,s)=>t+s.emps.length,0)}명`+(st.sites.some(s=>s.error)?' · 인식 실패: '+st.sites.filter(s=>s.error).map(s=>s.name+'('+s.error+')').join(', '):'');
+    const ok=st.sites,ne=ok.reduce((t,s)=>t+s.emps.length,0),ner=st.issues.filter(x=>x.lv==='err').length;
+    $('#fileinfo').textContent=`${file.name} · `+(st.std?`표준 양식 · 사업장 ${ok.length}개 · 직원 ${ne}명${ner?` · 양식 오류 ${ner}건`:' · 양식 검증 통과'}`:`비표준 양식(자동 인식) · 근태 시트 ${ok.length}개 인식 · 직원 ${ne}명 · 건너뛴 시트 ${st.skipped.length}개`);
     $('#fSite').innerHTML='<option value="">전체 사업장</option>'+ok.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
     renderAll();
   }catch(err){console.error(err);toast('파일을 읽지 못했습니다: '+err.message)}};fr.readAsArrayBuffer(file);
 }
+function initSite(s){
+  if(s.std){s.set={...s.stdSet};s.emps.forEach(e=>e.flags={...e.stdFlags})}
+  else{s.set={...guessSite(s),...(saved('site:'+s.name)||{})};s.emps.forEach(e=>e.flags={...guessFlags(s,e),...(saved('emp:'+s.name+'|'+e.name)||{})})}}
 function buildCodes(){const cnt={};
-  st.sites.forEach(s=>(s.emps||[]).forEach(e=>e.days.forEach(d=>{if(d.fromTime||d.code==='(기록없음)')return;const c=d.code;cnt[c]=cnt[c]||{n:0,sites:new Set()};cnt[c].n++;cnt[c].sites.add(s.name)})));
+  st.sites.forEach(s=>(s.emps||[]).forEach(e=>e.days.forEach(d=>{if(d.fromTime||d.std||d.code==='(기록없음)')return;const c=d.code;cnt[c]=cnt[c]||{n:0,sites:new Set()};cnt[c].n++;cnt[c].sites.add(s.name)})));
   if(st.sites.some(s=>s.set?.blankWork))cnt['(빈칸=근무)']=cnt['(빈칸=근무)']||{n:0,sites:new Set(st.sites.filter(s=>s.set?.blankWork).map(s=>s.name))};
   st.cnt=cnt;st.codes={'(기록없음)':{kind:'off',h:0,n:0}};
   const sc=savedPrefix('code:');Object.keys(cnt).forEach(c=>st.codes[c]=sc[c]?{...sc[c]}:guessCode(c));
 }
 function results(){const out=[];st.sites.forEach(s=>{if(s.error)return;s.emps.forEach(e=>out.push({s,e,r:analyze(s,e,st.codes,st.hol)}))});return out}
 function lvOf(r){return r.flags.some(f=>f.lv==='bad')?'bad':r.flags.some(f=>f.lv==='pay')?'pay':r.flags.some(f=>f.lv==='warn')?'warn':''}
-function renderAll(){st.res=results();renderKpis();renderRes();renderSites();renderCodes()}
+function renderAll(){st.res=results();renderKpis();renderIssues();renderRes();renderSites();renderCodes()}
+function renderIssues(){const el=$('#issues');const L=st.issues||[];
+  if(!st.file){el.hidden=true;return}el.hidden=false;
+  const err=L.filter(x=>x.lv==='err'),bad=st.std?err.length>0:true;el.className='issues'+(bad?' bad':'');
+  const head=st.std?(err.length?`<b class="hot">표준 양식 오류 ${err.length}건</b> — 아래 칸을 고쳐 다시 올려 주세요. 오류가 난 칸은 판정에서 빠지거나 다르게 계산됩니다.`:`<b>표준 양식 검증 통과</b>${L.length?` — 확인할 점 ${L.length}건`:''}`)
+    :`<b class="hot">비표준 양식 — 자동 인식 결과입니다.</b> 칸의 의미를 추정해서 읽었으므로 원본과 대조해야 합니다. 정확한 판정은 표준 양식으로 옮겨 올려 주세요.`;
+  const li=L.slice(0,300).map(x=>`<li><span class="tag ${x.lv==='err'?'bad':'warn'}">${x.lv==='err'?'오류':'확인'}</span> <b>${esc(x.sheet)}${x.cell?' '+x.cell:''}</b> ${esc(x.msg)}</li>`).join('');
+  el.innerHTML=`<p style="margin:0">${head}</p>`+(L.length?`<details ${L.length<=12?'open':''}><summary>항목 ${L.length}건 보기</summary><ul class="flags">${li}</ul>${L.length>300?'<p class="note">처음 300건만 표시</p>':''}</details>`:'')
+    +(st.skipped?.length?`<p class="note" style="margin:8px 0 0">근태표가 아니어서 건너뛴 시트 ${st.skipped.length}개: ${esc(st.skipped.join(', '))}</p>`:'');
+}
 function renderKpis(){const R=st.res;if(!R.length){$('#kpis').innerHTML='<div class="kpi" style="grid-column:1/-1"><span>아직 불러온 파일이 없습니다. 위에서 근태 엑셀을 올리면 여기 요약이 나옵니다.</span></div>';return}
   const c=fn=>R.filter(fn).length;
   const k=[['분석 인원',R.length,''],['주 52시간 초과',c(x=>x.r.flags.some(f=>f.lv==='bad'&&/시간 초과|평균/.test(f.t))),'bad'],['주휴일 미부여',c(x=>x.r.flags.some(f=>/7일 연속/.test(f.t))),'bad'],['연장수당 대상',c(x=>x.r.ot>0&&x.s.set.size5),''],['야간수당 대상',c(x=>x.r.night>0),''],['휴일근로수당 대상',c(x=>x.r.hol.length>0&&x.s.set.size5),''],['확인 필요',c(x=>x.r.flags.some(f=>f.lv==='warn')),'']];
@@ -405,7 +566,8 @@ function detail(s,e,r){const TN={labor:'노동절',public:'공휴일',weekly:'�
 function renderSites(){const el=$('#t-site');const ok=st.sites.filter(s=>!s.error);
   if(!ok.length){el.innerHTML='<p class="empty">파일을 올리면 사업장(시트)별 설정이 여기에 나옵니다.</p>';return}
   el.innerHTML='<p class="note">시트에서 자동 추정한 값입니다. 사업장 실제 운영에 맞게 바꾸면 판정이 즉시 다시 계산됩니다.</p>'+ok.map(s=>{const S=s.set;const ck=(k,l)=>`<label class="ck"><input type="checkbox" data-s="${s.id}" data-k="${k}" ${S[k]?'checked':''}>${l}</label>`;
-    return`<div class="card"><h3>${esc(s.name)} <span class="z" style="font-weight:400;font-size:14px">· ${s.format==='time'?'출퇴근시각형':'근태코드형'} · ${s.month.y}년 ${s.month.m}월 · ${s.emps.length}명</span></h3><div class="grid2">
+    return`<div class="card"><h3>${esc(s.name)} <span class="z" style="font-weight:400;font-size:14px">· ${s.std?'표준 양식':s.format==='time'?'출퇴근시각형(자동 인식)':'근태코드형(자동 인식)'} · ${s.month.y}년 ${s.month.m}월 · ${s.emps.length}명</span></h3>${s.std?'<p class="note" style="margin:0 0 8px">표준 양식의 설정 시트 값입니다. 여기서 바꾸면 이번 화면에만 반영되고 저장되지 않습니다.</p>':''}<div class="grid2">
+    ${s._src?`<label class="ck">대상월 <input type="month" data-s="${s.id}" data-k="month" value="${s.month.y}-${String(s.month.m).padStart(2,'0')}"></label>`:''}
     ${ck('size5','상시 5인 이상')}${ck('flex','탄력적 근로시간제 시행')}${ck('satHol','토요일을 약정 유급휴일로 가산')}${s.format==='grid'?ck('blankWork','빈칸 = 근무(8h)'):''}
     <label class="ck">주휴일 <select data-s="${s.id}" data-k="weekly"><option value="sun" ${S.weekly==='sun'?'selected':''}>일요일</option><option value="sat" ${S.weekly==='sat'?'selected':''}>토요일</option><option value="shift" ${S.weekly==='shift'?'selected':''}>교대 — 주 마지막 휴무일</option></select></label></div></div>`}).join('');
 }
@@ -421,8 +583,12 @@ function holToText(){$('#holText').value=Object.entries(st.hol).sort().map(([k,v
 holToText();
 document.addEventListener('change',ev=>{const t=ev.target;
   if(t.id==='file'&&t.files[0])return load(t.files[0]);
-  if(t.dataset.e){const x=st.res.find(x=>x.e.id===t.dataset.e);x.e.flags[t.dataset.f]=t.checked;renderAll();save('emp:'+x.s.name+'|'+x.e.name,{...x.e.flags});return}
-  if(t.dataset.s){const s=st.sites[+t.dataset.s];s.set[t.dataset.k]=t.type==='checkbox'?t.checked:t.value;if(t.dataset.k==='blankWork'||t.dataset.k==='weekly'){buildCodes();s.emps.forEach(e=>{if(t.dataset.k==='weekly')e.flags.shift=t.value==='shift'||e.flags.shift})}renderAll();save('site:'+s.name,{...s.set});return}
+  if(t.dataset.e){const x=st.res.find(x=>x.e.id===t.dataset.e);x.e.flags[t.dataset.f]=t.checked;renderAll();if(!x.s.std)save('emp:'+x.s.name+'|'+x.e.name,{...x.e.flags});return}
+  if(t.dataset.k==='month'&&t.dataset.s){const s=st.sites[+t.dataset.s],[y,m]=t.value.split('-').map(Number);if(!y||!m||!s._src)return;
+    const p=parseGrid(s.name,s._src.rows,s._src.dr,null,{y,m}),fl=new Map(s.emps.map(e=>[e.name,e.flags]));
+    s.month=p.month;s.emps=p.emps.map((e,j)=>({...e,id:s.id+'-'+j,flags:fl.get(e.name)||guessFlags(s,e)}));
+    st.issues=st.issues.filter(x=>!(x.sheet===s.name&&x.month));st.open.clear();buildCodes();renderAll();toast(`${s.name}: ${y}년 ${m}월로 다시 읽었습니다`);return}
+  if(t.dataset.s){const s=st.sites[+t.dataset.s];s.set[t.dataset.k]=t.type==='checkbox'?t.checked:t.value;if(t.dataset.k==='blankWork'||t.dataset.k==='weekly'){buildCodes();s.emps.forEach(e=>{if(t.dataset.k==='weekly')e.flags.shift=t.value==='shift'||e.flags.shift})}renderAll();if(!s.std)save('site:'+s.name,{...s.set});return}
   if(t.dataset.c){const c=t.dataset.c,e=st.codes[c];e[t.dataset.k]=t.dataset.k==='kind'?t.value:+t.value;
     if(t.dataset.k==='kind'){const g={work:8,holwork:8,half:4};if(g[t.value]&&!e.h)e.h=g[t.value];if(!g[t.value]){e.h=0;e.n=0}}
     renderAll();save('code:'+c,{...e});return}

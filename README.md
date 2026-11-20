@@ -16,6 +16,7 @@
 | `config.js` | Supabase URL·anon 키 |
 | `supabase/migrations/…_att_settings.sql` | 테이블·RLS 정책 |
 | `vercel.json` | Vercel 배포 설정 (`main` 푸시 시 자동 배포) |
+| `templates/` | 표준 양식 2종과 생성 스크립트 |
 
 ## Supabase 설정
 
@@ -49,6 +50,18 @@ python3 -m http.server 8000
 ```
 
 이후 `http://localhost:8000` 에서 엽니다. `config.js`를 상대 경로로 읽으므로 파일을 더블클릭해 여는 방식(file://)이 아니라 이렇게 띄워야 합니다.
+
+## 표준 양식
+
+사업장마다 출근부 양식이 달라 자동 인식만으로는 오판이 생깁니다 (월 추정, 다중행 양식의 연장·야간 행 누락, 숫자가 일수인지 시간인지 불명확 등).
+정확한 판정이 필요하면 아래 양식으로 옮겨 올립니다. 웹 화면 상단에서도 내려받을 수 있습니다.
+
+| 파일 | 용도 |
+| --- | --- |
+| `templates/attendance-std-daily.xlsx` | ① 일별 근태표 — 직원마다 근태/근로시간/연장/야간 4줄 |
+| `templates/attendance-std-clock.xlsx` | ② 출퇴근 기록 — 직원·날짜마다 한 줄 (출퇴근 기록기 자료 붙여넣기용) |
+
+양식을 고치려면 `templates/make_templates.py`를 수정하고 `python3 templates/make_templates.py`로 다시 만듭니다 (openpyxl 필요).
 
 ## 판정 기준
 
