@@ -37,6 +37,14 @@
 1. 저장소 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 설정합니다.
 2. `main`에 푸시하면 자동 배포됩니다.
 
+## Vercel 배포
+
+1. https://vercel.com/new 에서 **Import Git Repository** → `attendance-check` 선택 → **Deploy**.
+   빌드 설정은 `vercel.json` 에 들어 있어 따로 바꿀 것이 없습니다 (`index.html`·`config.js` 만 배포).
+2. 배포 주소(예: `https://attendance-check.vercel.app/`)를 Supabase **Authentication → URL Configuration** 의
+   Redirect URLs 에 추가합니다. Vercel 을 주 주소로 쓸 거면 Site URL 도 이 주소로 바꿉니다.
+3. 이후 `main` 에 푸시하면 Vercel 이 자동으로 다시 배포합니다.
+
 ## 로컬 실행
 
 ```bash

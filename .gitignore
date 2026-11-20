@@ -4,3 +4,4 @@
 *.xlsm
 .env*
 supabase/.temp/
+_site/
